@@ -37,7 +37,7 @@ final class InputsWidget extends Widget {
             if(!passthrough&&!tuner)continue;
             TvInputInfo shown=passthrough&&child.containsKey(info.getId())?child.get(info.getId()):info;
             Input in=new Input();in.id=shown.getId();in.tuner=tuner;in.cec=shown!=info;in.vendor=info.getServiceInfo().packageName;in.service=info.getServiceInfo().name;
-            in.name=label(shown,context);if(tuner&&(in.name.isEmpty()||in.name.matches("(?i)tv|tuner|antenna|atv|dtv")))in.name="Live TV";
+            in.name=tuner?"TV":label(shown,context);
             try{in.state=manager.getInputState(shown.getId());}catch(RuntimeException e){in.state=TvInputManager.INPUT_STATE_CONNECTED;}
             if(tuner)in.glyph="antenna";
             else if(in.cec){int[] cec=cec(shown);Devices.Device d=Devices.identify(in.name,cec[0],cec[1]);in.port=label(info,context);in.name=d.name;in.glyph=d.glyph;in.color=d.color;}
@@ -66,7 +66,7 @@ final class InputsWidget extends Widget {
         String[][] made={{"PS5","1","0"},{"Xbox Series X","2","1"},{"Apple TV","3","1"}};
         for(String[] m:made){Devices.Device d=Devices.identify(m[0],-1,Devices.PLAYBACK);Input in=new Input();in.id="promo:"+m[1];in.port="HDMI "+m[1];in.cec=true;in.made=true;
             in.name=d.name;in.glyph=d.glyph;in.color=d.color;in.state=Integer.parseInt(m[2]);out.add(in);}
-        Input tv=new Input();tv.id="promo:tv";tv.tuner=true;tv.made=true;tv.name="Live TV";tv.glyph="antenna";out.add(tv);
+        Input tv=new Input();tv.id="promo:tv";tv.tuner=true;tv.made=true;tv.name="TV";tv.glyph="antenna";out.add(tv);
     }
     private static void pretend(ArrayList<Input> out){
         String[][] made={{"PS5","0"},{"Xbox Series X","1"},{"NintendoSwitch","0"}};int i=0;

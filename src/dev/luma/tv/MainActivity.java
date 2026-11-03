@@ -19,7 +19,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import org.json.*;
 
-/** An offline, remote-first home screen. No network, analytics, or accessibility service. */
+/** A remote-first home screen. Input key remapping is optional and explicitly enabled by the user. */
 public final class MainActivity extends Activity {
     private final ExecutorService loader = Executors.newSingleThreadExecutor();
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -39,6 +39,7 @@ public final class MainActivity extends Activity {
     private ScrollView scroll;
     private LinearLayout rows;
     private String page = "home", selectedPackage = "com.google.android.youtube.tv";
+    private boolean changingPage;
     private String movingApp;
     private String movingReturnPage;
     private ArrayList<String> movingOrder;
@@ -105,6 +106,7 @@ public final class MainActivity extends Activity {
         registerReceiver(packages,filter);
         createShell();
         discover();
+        if(InputKeyService.SHOW_INPUTS.equals(getIntent().getAction()))root.post(this::openInputs);
     }
 
     @Override protected void onResume() {
@@ -134,6 +136,7 @@ public final class MainActivity extends Activity {
     @Override protected void onDestroy() { try{unregisterReceiver(packages);}catch(IllegalArgumentException ignored){} if(wallpaper!=null){wallpaper.pauseAmbient();wallpaper.surfaceThread.quitSafely();}super.onDestroy(); handler.removeCallbacksAndMessages(null); loader.shutdownNow(); if(sonic!=null)sonic.release(); }
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        if(InputKeyService.SHOW_INPUTS.equals(intent.getAction())){root.post(this::openInputs);return;}
         String look=intent.getStringExtra("luma.daylight");
         if(look!=null&&look.matches("day|night|auto")){daylightOverride=look;if(started)syncDaylight();}
         String demo=intent.getStringExtra("luma.demo");if(demo!=null){Promo.on=demo.equals("promo");if(Promo.on)Promo.start(this);board=null;homePage=0;showPage("home",true);} // board=null: start on the first page
@@ -229,13 +232,19 @@ public final class MainActivity extends Activity {
             TextView tab = text(titles[i], 14, 0xB3FFFFFF, "sans-serif-medium");
             tab.setPadding(px(17), px(9), px(17), px(9)); tab.setGravity(Gravity.CENTER);
             tab.setFocusable(true); tab.setFocusableInTouchMode(true); tab.setSoundEffectsEnabled(false);
-            tab.setOnClickListener(v -> { sound(); showPage(pages[index], true); });
+            tab.setOnClickListener(v -> { sound();if(!page.equals(pages[index]))showPage(pages[index],false);focusPage(); });
             // One pill slides between tabs; leaving the bar it settles, translucent, on the current page.
-            tab.setOnFocusChangeListener((v, focus) -> { if(focus) moveTabIndicator(true); else tab.post(()->{ if(focusedTab()<0) moveTabIndicator(true); }); });
+            tab.setOnFocusChangeListener((v, focus) -> { if(focus){moveTabIndicator(true);if(!changingPage)tab.post(()->{if(tab.hasFocus()&&!changingPage&&!page.equals(pages[index]))showPage(pages[index],false);});}else tab.post(()->{ if(focusedTab()<0) moveTabIndicator(true); }); });
             tab.setOnKeyListener((v,key,e) -> {
+                if(key==KeyEvent.KEYCODE_DPAD_LEFT||key==KeyEvent.KEYCODE_DPAD_RIGHT){
+                    if(e.getAction()==KeyEvent.ACTION_DOWN&&(e.getRepeatCount()==0||e.getRepeatCount()%2==0)){
+                        int next=index+(key==KeyEvent.KEYCODE_DPAD_RIGHT?1:-1);if(next>=0&&next<tabs.size())tabs.get(next).requestFocus();
+                    }
+                    return true;
+                }
                 if (e.getAction()==KeyEvent.ACTION_DOWN && key==KeyEvent.KEYCODE_DPAD_DOWN) {
-                    View widget=index==0&&board!=null?board.first():null;
-                    if (!page.equals(pages[index])) showPage(pages[index], true); else if(widget!=null)widget.requestFocus();else focusFirst();
+                    if(!page.equals(pages[index]))showPage(pages[index],false);
+                    focusPage();
                     return true;
                 }
                 return false;
@@ -276,7 +285,7 @@ public final class MainActivity extends Activity {
                         app.color=colorFor(pkg);
                         app.description=descriptionFor(pkg);
                         app.tag=tagFor(pkg);
-                        Drawable banner=info.activityInfo.applicationInfo.loadBanner(pm);
+                        Drawable banner=info.activityInfo.loadBanner(pm);
                         if (banner!=null) app.banner=bitmap(banner, 320, 180);
                         found.add(app);
                     } catch (RuntimeException ignored) { /* A package can disappear during an update. */ }
@@ -314,6 +323,8 @@ public final class MainActivity extends Activity {
 
     private void showPage(String next, boolean focus) {
         if(movingApp!=null)endMoving(false,false);
+        boolean keepTab=focusedTab()>=0;
+        changingPage=true;
         String previous=page;
         boolean transition=loaded && !previous.equals(next) && motion();
         for(Animator animation:pageAnimations)animation.cancel();pageAnimations.clear();
@@ -329,7 +340,7 @@ public final class MainActivity extends Activity {
         wallpaper.update();wallpaper.rest();wallpaper.syncAmbient();
         sceneryShade.animate().cancel();
         sceneryShade.setAlpha(page.equals("settings")?1:0);
-        if (page.equals("settings")) { settings(focus); animatePage(previous,transition); return; }
+        if (page.equals("settings")) { settings(false);finishPageFocus(focus,keepTab);animatePage(previous,transition);return; }
         boolean home=page.equals("home");
         hero=new FrameLayout(this){@Override public boolean hasOverlappingRendering(){return false;}};
         heroTitle=text(home ? welcome() : "All your apps", 42, ink(0xFF), "sans-serif-medium");
@@ -363,7 +374,7 @@ public final class MainActivity extends Activity {
             if(houseWidgets!=null&&!board.onHouse()){houseWidgets.setVisibility(View.INVISIBLE);houseWidgets.setActive(false);}
             board.setActive(started);
         }
-        scroll=new ScrollView(this); scroll.setFillViewport(false); scroll.setClipChildren(false); scroll.setClipToPadding(false);
+        scroll=new ScrollView(this); scroll.setFillViewport(false); scroll.setClipChildren(true); scroll.setClipToPadding(false);
         scroll.setVerticalScrollBarEnabled(false); scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         rows=new LinearLayout(this); rows.setOrientation(LinearLayout.VERTICAL); rows.setClipChildren(false); rows.setClipToPadding(false);
         rows.setPadding(px(48),px(home?16:10),px(48),px(30));
@@ -388,8 +399,14 @@ public final class MainActivity extends Activity {
                 rows.addView(row,new LinearLayout.LayoutParams(-1,px(112)));
             }
         }
-        if (focus) root.post(()->{holdGreeting=page.equals("home");focusFirst();});
+        finishPageFocus(focus,keepTab);
         animatePage(previous,transition);
+    }
+    private void finishPageFocus(boolean focus,boolean keepTab){
+        // Removing the old page can give Home automatic fallback focus. It must not navigate back.
+        if(!focus&&keepTab)tabs.get(pageTab()).requestFocus();
+        changingPage=false;
+        if(focus){final String expected=page;root.post(()->{if(!page.equals(expected))return;holdGreeting=page.equals("home");if(page.equals("settings"))controlsFocus(0);else focusFirst();});}
     }
 
     private void animatePage(String previous,boolean transition) {
@@ -420,6 +437,11 @@ public final class MainActivity extends Activity {
     private void focusFirst() {
         for (Tile tile:tiles) if (tile.app.pkg.equals(selectedPackage)) { tile.requestFocus(); return; }
         if (!tiles.isEmpty()) tiles.get(0).requestFocus();
+    }
+    private void focusPage(){
+        if(page.equals("settings")){controlsFocus(0);return;}
+        View widget=page.equals("home")&&board!=null?board.first():null;
+        if(widget!=null)widget.requestFocus();else focusFirst();
     }
     /** Under the greeting: today's date, quietly. */
     private String greetingLine(){return today();}
@@ -791,7 +813,7 @@ public final class MainActivity extends Activity {
         moveHint.setGravity(Gravity.CENTER);moveHint.setBackground(shape(glass(),14));moveHint.setTranslationZ(px(40));
         root.addView(moveHint,pos(760,34,100,158));
         for(Tile tile:tiles)if(tile.app.pkg.equals(movingApp)){
-            tile.requestFocus();tile.label.setText("↔  "+app.label);tile.rim.setAlpha(255);tile.face.setElevation(px(22));
+            tile.requestFocus();tile.label.setText("↔  "+app.label);tile.rim.setAlpha(255);tile.face.setElevation(px(8));
         }
         setHero("@move",app.label,"Move with the arrows. Press OK to save, or Back to cancel.");
         heroDescription.setVisibility(View.INVISIBLE);
@@ -803,7 +825,7 @@ public final class MainActivity extends Activity {
         if(save)prefs.edit().putString("order",String.join(",",movingOrder)).apply();
         movingOrder=null;if(moveHint!=null){root.removeView(moveHint);moveHint=null;}
         if(heroDescription!=null)heroDescription.setVisibility(View.VISIBLE);
-        for(Tile tile:tiles)if(tile.app.pkg.equals(pkg)){tile.label.setText(tile.app.label);tile.face.setElevation(px(tile.hasFocus()?14:2));}
+        for(Tile tile:tiles)if(tile.app.pkg.equals(pkg)){tile.label.setText(tile.app.label);tile.face.setElevation(px(tile.hasFocus()?4:0));}
         if(rebuild&&(!save||!page.equals(back))){selectedPackage=pkg;showPage(back,true);}
         else{selectedPackage=pkg;if(page.equals("apps"))setHero("@apps","All your apps","Everything installed on this TV.");else for(Tile tile:tiles)if(tile.app.pkg.equals(pkg))selectApp(tile.app);}
     }
@@ -820,6 +842,7 @@ public final class MainActivity extends Activity {
         movingOrder.remove(movingApp);movingOrder.add(movingOrder.indexOf(target)+(to>from?1:0),movingApp);
         Tile lifted=tiles.remove(from);tiles.add(to,lifted);
         // Reuse the cards rather than rebuilding Home and its widgets on every key press.
+        for(Animator animation:pageAnimations)animation.cancel();pageAnimations.clear();
         for(Tile tile:tiles)((ViewGroup)tile.getParent()).removeView(tile);
         rows.removeAllViews();
         LinearLayout row=null;
@@ -828,7 +851,11 @@ public final class MainActivity extends Activity {
             Tile tile=tiles.get(i);tile.index=i;
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(px(132),px(108));if(i%6>0)lp.leftMargin=px(14.4f);row.addView(tile,lp);
         }
-        lifted.requestFocus();lifted.label.setText("↔  "+lifted.app.label);lifted.face.setElevation(px(22));lifted.rim.setAlpha(255);
+        lifted.requestFocus();
+        // Detaching cancels focus animations at their current frame. Settle every reused card,
+        // including its artwork layer, so a former selection cannot keep its tilt or offset.
+        for(Tile tile:tiles)tile.settleAfterMove();
+        lifted.label.setText("↔  "+lifted.app.label);lifted.face.setElevation(px(8));lifted.rim.setAlpha(255);
         navigationSound(to);
     }
     @Override public boolean dispatchKeyEvent(KeyEvent event){
@@ -843,16 +870,17 @@ public final class MainActivity extends Activity {
             }
         }
         if(key==KeyEvent.KEYCODE_TV_INPUT){
-            if(event.getAction()==KeyEvent.ACTION_DOWN&&event.getRepeatCount()==0){
-                ArrayList<InputsWidget.Input> inputs=InputsWidget.list(this);
-                if(!inputs.isEmpty()){
-                    String[] labels=new String[inputs.size()];for(int i=0;i<inputs.size();i++)labels[i]=inputs.get(i).name;
-                    menu("Inputs",labels,-1,index->{try{startActivity(InputsWidget.intent(inputs.get(index)));}catch(ActivityNotFoundException|SecurityException e){notice("Input unavailable","This TV could not open that input.");}});
-                }
-            }
+            if(event.getAction()==KeyEvent.ACTION_DOWN&&event.getRepeatCount()==0)openInputs();
             return true;
         }
         return super.dispatchKeyEvent(event);
+    }
+    private void openInputs(){
+        if(movingApp!=null)finishMoving(false);
+        ArrayList<InputsWidget.Input> inputs=InputsWidget.list(this);
+        if(inputs.isEmpty()){notice("Inputs","No TV inputs are available on this device.");return;}
+        String[] labels=new String[inputs.size()];for(int i=0;i<inputs.size();i++)labels[i]=inputs.get(i).name;
+        menu("Inputs",labels,-1,index->{try{startActivity(InputsWidget.intent(inputs.get(index)));}catch(ActivityNotFoundException|SecurityException e){notice("Input unavailable","This TV could not open that input.");}});
     }
 
     /* ---------- Settings ---------- */
@@ -908,6 +936,8 @@ public final class MainActivity extends Activity {
         controls.add(option(list,"Home screen",()->lumaIsHome()?"Luma":"TV default",null,this::homeScreen,
             ()->preview(0,"Home screen",lumaIsHome()?"Luma opens when you press Home. Choose to return to your TV's own home screen.":"Your TV's own home screen opens when you press Home.")));
         caption(list,"System",false);
+        if(InputsWidget.count>0)controls.add(option(list,"Remote Input button",()->InputKeyService.enabled(this)?"Enabled":"Set up",null,this::inputButtonSettings,
+            ()->preview(0,"Remote Input button","Use the remote Input button to open Luma inputs. Some TVs need the optional Luma Input button accessibility service.")));
         controls.add(option(list,"Device settings",()->"",null,()->startActivity(new Intent(Settings.ACTION_SETTINGS)),()->preview(0,"Device settings","Network, picture, sound and accounts.")));
         controls.add(option(list,"Support the author",()->"",null,this::supportScreen,()->preview(0,"Support the author","Luma is free and has no ads. A tip in crypto helps it grow.")));
         controls.add(option(list,"About Luma",()->"",null,this::aboutScreen,()->preview(0,"About Luma","Version "+version()+" · made by "+about("author"))));
@@ -920,6 +950,24 @@ public final class MainActivity extends Activity {
             if(choice==0){notice("About Up Next","Luma reads Continue watching from Android TV (added by apps like HBO Max and Atresplayer), followed by recent apps. Reset hides existing entries in Luma until those apps publish new activity. It does not clear your viewing history in those services.");return;}
             menu("Reset Up Next?",new String[]{"Cancel","Reset what Luma shows"},0,confirm->{if(confirm==1){UpNextWidget.reset(prefs,System.currentTimeMillis());notice("Up Next reset","Existing entries are hidden in Luma. New playback activity and apps you open from now on will appear here.");}});
         });
+    }
+    private void inputButtonSettings(){
+        menu("Remote Input button",new String[]{"Open input selector","Set up remote button","About this shortcut"},-1,choice->{
+            if(choice==0){openInputs();return;}
+            if(choice==1){
+                Intent settings=inputSetupIntent();
+                if(settings.resolveActivity(getPackageManager())!=null)try{startActivity(settings);return;}catch(ActivityNotFoundException|SecurityException ignored){}
+                notice("Remote button setup","Open Device settings → Accessibility and enable Luma Input button. If your TV has no such screen, a connected computer is needed to enable it once.");return;
+            }
+            notice("About the Input shortcut","Some TVs send Input to their original launcher. The optional Luma Input button service handles that key and opens this selector. Android requires accessibility access; Luma does not access screen contents. Other keys pass through unchanged.");
+        });
+    }
+    private Intent inputSetupIntent(){
+        Intent settings=new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+        ComponentName target=settings.resolveActivity(getPackageManager());
+        // Google's TV stub resolves successfully but only shows 'unavailable on this TV'.
+        if(target==null||target.getPackageName().equals("com.google.android.tv.frameworkpackagestubs"))return new Intent(Settings.ACTION_SETTINGS);
+        return settings;
     }
     private void caption(LinearLayout list,String label,boolean first){
         TextView c=text(label,13,ink(0x99),"sans-serif-medium");c.setPadding(px(10),0,0,0);
@@ -1196,7 +1244,7 @@ public final class MainActivity extends Activity {
             super(MainActivity.this);app=item;index=number;
             setClipChildren(false);setClipToPadding(false);setFocusable(true);setFocusableInTouchMode(true);setSoundEffectsEnabled(false);
             setContentDescription(app.label+". OK: open. Hold OK: organize app.");
-            face=new FrameLayout(MainActivity.this);GradientDrawable faceBg=shape(app.color,16);faceBg.setStroke(Math.max(1,px(.6f)),0x1FFFFFFF);face.setBackground(faceBg);face.setClipToOutline(true);face.setElevation(px(2));face.setCameraDistance(px(900));
+            face=new FrameLayout(MainActivity.this);GradientDrawable faceBg=shape(app.color,16);faceBg.setStroke(Math.max(1,px(.6f)),0x1FFFFFFF);face.setBackground(faceBg);face.setClipToOutline(true);face.setCameraDistance(px(900));
             art=new Art(app);face.addView(art,new FrameLayout.LayoutParams(-1,-1));
             light=new Shine();light.setAlpha(0);face.addView(light,new FrameLayout.LayoutParams(-1,-1));
             rim=shape(Color.TRANSPARENT,16);rim.setStroke(px(1.2f),0xF0FFFFFF);rim.setAlpha(0);face.setForeground(rim);
@@ -1206,8 +1254,7 @@ public final class MainActivity extends Activity {
             movement=new TileMotion(this);
             setOnFocusChangeListener((v,f)-> {
                 movement.focus(f);
-                face.setElevation(px(f?14:2));rim.setAlpha(f?210:0);
-                label.animate().cancel();if(motion())label.animate().alpha(f?1:0).translationY(f?0:-px(3)).setDuration(f?260:140).setInterpolator(ease).start();else label.setAlpha(f?1:0);
+                face.setElevation(px(f?4:0));rim.setAlpha(f?210:0);
                 setTranslationZ(px(f?20:0));
                 if(f) {
                     selectApp(app);wallpaper.follow(index);
@@ -1238,6 +1285,12 @@ public final class MainActivity extends Activity {
             });
         }
         @Override protected void onDetachedFromWindow(){movement.stop();super.onDetachedFromWindow();}
+        void settleAfterMove(){
+            animate().cancel();setAlpha(1);setTranslationX(0);setTranslationY(0);
+            movement.focused=hasFocus();movement.snap();
+            label.setAlpha(hasFocus()?1:0);label.setTranslationY(hasFocus()?0:-px(3));
+            rim.setAlpha(hasFocus()?210:0);face.setElevation(px(hasFocus()?4:0));setTranslationZ(px(hasFocus()?20:0));
+        }
     }
 
     /** Native property animations keep the static card artwork cached on the GPU. */
@@ -1247,28 +1300,19 @@ public final class MainActivity extends Activity {
         TileMotion(Tile tile){this.tile=tile;}
         void focus(boolean value) {
             focused=value;pressed=false;
-            if(value && motion()) {
-                tile.face.animate().cancel();
-                tile.face.setRotationY(-lastDirectionX*4.5f);tile.face.setRotationX(lastDirectionY*3f);
-            }
+            // Keep the artwork fixed inside its clipped face. Animating children here both
+            // exposed its edges and invalidated the face's hardware layer on every frame.
+            tile.art.animate().cancel();tile.art.setTranslationX(0);tile.art.setTranslationY(0);
+            tile.light.animate().cancel();tile.light.setTranslationX(0);tile.light.setAlpha(value?.45f:0);
             start();
-            if(motion()) {
-                tile.art.animate().cancel();
-                float depthX=focused?px((tile.index%6-2.5f)*.7f):0;
-                float depthY=focused?-px(1):0;
-                if(focused){tile.art.setTranslationX(depthX-px(lastDirectionX*4.5f));tile.art.setTranslationY(depthY+px(lastDirectionY*3));tile.light.setTranslationX(px(lastDirectionX*12));}
-                tile.art.animate().translationX(depthX).translationY(depthY).setDuration(520).setInterpolator(drift).start();
-                tile.light.animate().translationX(focused?-depthX*2:0).alpha(focused?.6f:0).setDuration(580).setInterpolator(drift).start();
-            }
         }
         void press(boolean down){pressed=down;start();}
         void start(){
             if(!motion()){snap();return;}
             tile.face.animate().cancel();tile.label.animate().cancel();tile.light.animate().cancel();
             float scale=(focused?1.11f:1)-(pressed?.03f:0);
-            tile.face.animate().scaleX(scale).scaleY(scale).translationY(focused?-px(3):0).rotationX(0).rotationY(0).setDuration(pressed?65:420).setInterpolator(pressed?ease:spring).withLayer().start();
-            tile.label.animate().scaleX(focused?1.025f:1).scaleY(focused?1.025f:1).setDuration(260).setInterpolator(ease).start();
-            tile.light.animate().alpha(focused?.6f:0).setDuration(200).setInterpolator(ease).start();
+            tile.face.animate().scaleX(scale).scaleY(scale).translationY(focused?-px(3):0).rotationX(0).rotationY(0).setDuration(pressed?65:240).setInterpolator(ease).withLayer().start();
+            tile.label.animate().alpha(focused?1:0).translationY(focused?0:-px(3)).scaleX(focused?1.025f:1).scaleY(focused?1.025f:1).setDuration(focused?200:140).setInterpolator(ease).start();
         }
         void stop(){tile.face.animate().cancel();tile.art.animate().cancel();tile.label.animate().cancel();tile.light.animate().cancel();}
         void snap(){
@@ -1277,6 +1321,7 @@ public final class MainActivity extends Activity {
             tile.face.setScaleX(scale);tile.face.setScaleY(scale);tile.face.setTranslationY(focused?-px(3):0);tile.face.setRotationX(0);tile.face.setRotationY(0);
             tile.art.setTranslationX(0);tile.art.setTranslationY(0);tile.light.setTranslationX(0);tile.light.setAlpha(focused?.6f:0);
             tile.label.setScaleX(focused?1.025f:1);tile.label.setScaleY(focused?1.025f:1);
+            tile.label.setAlpha(focused?1:0);tile.label.setTranslationY(focused?0:-px(3));
         }
     }
 
@@ -1292,11 +1337,7 @@ public final class MainActivity extends Activity {
             bounds.set(0,0,w,h);
             p.setColor(app.color);p.setShader(null);c.drawRoundRect(bounds,px(16),px(16),p);
             String pkg=app.pkg;
-            if(pkg.equals("com.google.android.youtube.tv")) {
-                float cx=w/2,cy=h/2;
-                p.setColor(0xFFFF0033);bounds.set(cx-px(25),cy-px(17),cx+px(25),cy+px(17));c.drawRoundRect(bounds,px(10),px(10),p);
-                p.setColor(Color.WHITE);Path path=new Path();path.moveTo(cx-px(5),cy-px(9));path.lineTo(cx+px(10),cy);path.lineTo(cx-px(5),cy+px(9));path.close();c.drawPath(path,p);
-            } else if(pkg.equals("com.soundcloud.android")) {
+            if(pkg.equals("com.soundcloud.android")) {
                 drawIcon(c,app.icon,48);
             } else if(pkg.equals("com.ted.android.tv")) {
                 p.setTypeface(Typeface.create("sans-serif-black",Typeface.BOLD));p.setTextSize(px(33));p.setTextAlign(Paint.Align.CENTER);p.setColor(0xFFFF302B);c.drawText("TED",w/2,h/2+px(12),p);
@@ -1320,7 +1361,7 @@ public final class MainActivity extends Activity {
             } else if(pkg.equals("com.google.android.vending") || pkg.equals("com.android.vending")) {
                 drawIcon(c,app.icon,47);
             } else if(app.banner!=null) {
-                float ratio=Math.min(w/app.banner.getWidth(),h/app.banner.getHeight());
+                float ratio=Math.max(w/app.banner.getWidth(),h/app.banner.getHeight());
                 float bw=app.banner.getWidth()*ratio,bh=app.banner.getHeight()*ratio;
                 bounds.set((w-bw)/2,(h-bh)/2,(w+bw)/2,(h+bh)/2);p.setAlpha(255);c.drawBitmap(app.banner,null,bounds,p);
             } else drawIcon(c,app.icon,48);
@@ -1350,6 +1391,8 @@ public final class MainActivity extends Activity {
         volatile boolean ambientRunning;
         volatile float ambientSeconds,cloudX,cloudY;
         long lastAmbientTick,ambientTicks;
+        long inputUntil;
+        final Runnable resumeAfterInput=this::syncAmbient;
         private final Runnable ambientTick=new Runnable(){public void run(){
             if(!ambientEligible()){syncAmbient();return;}
             long now=SystemClock.uptimeMillis();
@@ -1380,6 +1423,11 @@ public final class MainActivity extends Activity {
             update();
         }
         void follow(int index) {
+            // Give navigation priority over repainting a full-screen living background.
+            inputUntil=SystemClock.uptimeMillis()+450;pauseAmbient();handler.removeCallbacks(resumeAfterInput);handler.postDelayed(resumeAfterInput,450);
+            // Flat photographic backgrounds need no per-focus SurfaceView movement.
+            // Keep the layered landscape's depth, without moving a full-screen surface for every arrow.
+            if(requestedStyle>=2){rest();return;}
             skyTrack.animate().cancel();terrain.animate().cancel();
             float position=(index%6-2.5f)/2.5f;
             float arc=1-position*position;
@@ -1393,7 +1441,7 @@ public final class MainActivity extends Activity {
             skyTrack.setTranslationX(0);skyTrack.setTranslationY(0);terrain.setTranslationX(0);terrain.setTranslationY(0);
         }
         private boolean ambientEligible() {
-            return started && hasWindowFocus() && !page.equals("settings") && requestedStyle!=2
+            return SystemClock.uptimeMillis()>=inputUntil && started && hasWindowFocus() && !page.equals("settings") && requestedStyle!=2
                 && motion() && prefs.getBoolean("ambient",true) && sky.scene!=null && terrain.scene!=null;
         }
         void syncAmbient() {

@@ -3,7 +3,7 @@
 An Android TV and Google TV launcher based on [Luma by 0xProbabillity](https://github.com/0xProbabillity/luma-tv).
 This fork maintains our fixes and an installation signed with our own key.
 
-The current version is **2.5.1**, with the package ID **`dev.luma.tv`**. On the reference Xiaomi P1E, it replaces
+The current version is **2.5.3**, with the package ID **`dev.luma.tv`**. On the reference Xiaomi P1E, it replaces
 the original author's installation and serves as the default Home app. Subsequent updates use the same
 signing key and preserve application data.
 
@@ -19,28 +19,36 @@ may also come from that demo.
 
 | Change | Behavior |
 | --- | --- |
-| Continuous app reordering | Hold OK → **Move**. Arrow keys change the position; OK saves and Back cancels. Starting from Home opens the full app grid so apps can move beyond the six favorites. |
+| Continuous app reordering | Hold OK → **Move**. Arrow keys change the position; OK saves and Back cancels. Starting from Home opens the full app grid so apps can move beyond the six favorites. Reordering also settles every card's artwork and focus transforms. |
 | Up Next management | **Settings → Up Next** explains the data sources and lets you reset what Luma displays. Later activity may appear again. |
 | TV inputs | Groups tuners with the same provider, service, and label. Preserves AV/HDMI names and opens the tuner as live TV. |
-| Netflix | Uses the installed app's banner, falling back to its icon, instead of drawing an N with a generic font. |
-| Now Playing access | Checks whether the permission screen exists. If unavailable, displays an explanation and the corresponding ADB command. |
+| TV tuner | The antenna/cable tuner is named **TV** in the widget and input selector. |
+| Remote Input button | Optional **Luma Input button** accessibility service opens Luma's input selector. It requires explicit activation; the Inputs section remains available. |
+| YouTube and Netflix | Use the installed app's banner, falling back to its icon. YouTube no longer uses a logo drawn by Luma. |
+| Now Playing access | Checks whether the permission screen exists. If unavailable, **Setup help** explains setup from a connected computer. |
+| Resume media | Keeps the last video's title, artwork when available, and paused progress after its app removes the session. **Resume** opens the source app. Media sessions are observed while Home is off screen. |
+| Top navigation | Focusing Home, Apps, or Settings switches its content immediately. Down or OK enters the selected page. |
+| Focus animation | Keeps artwork aligned with the card, reduces shadows, and gives navigation priority over the animated wallpaper. Flat photographic backgrounds stay still during focus changes. |
 | Builds and tests | Supports custom package IDs and labels for test installations. The QA suite produces a separate APK from the production build. |
 | Xiaomi recovery | Includes the script, guide, and saved states needed to restore the reference TV's original configuration. |
 
-Details and completed checks are recorded in the [fix report](docs/fixes-2026-11-03.md).
+Details and completed checks are recorded in the [initial fix report](docs/fixes-2026-11-03.md) and the
+[2.5.2 update](docs/fixes-2.5.2.md) and [2.5.3 update](docs/fixes-2.5.3.md).
 
 ## Status and limitations
 
 The tested reference device is a **Xiaomi P1E / MiTV-MSSP3 running Android 9**. The manifest supports
 Android 8.0 and later, but this does not establish compatibility with every TV.
 
-- **The physical Input button remains unresolved on this Xiaomi.** The firmware intercepts the key and tries
-  to open a panel inside Android TV Home, which is disabled to keep Luma as the Home app. Enabling it forces
-  Google's Home app back into use. Luma's handler works when it receives the event; that test does not validate
-  the physical remote's event path. The **Inputs** section remains available.
+- **Input needs setup on this Xiaomi.** The firmware sends the key to Android TV Home, which is disabled to
+  keep Luma as the Home app. The optional **Luma Input button** service can intercept it first. Activation
+  is complete on the reference TV; physical-remote verification is pending. **Settings → Remote Input
+  button** provides setup and access to the selector. The **Inputs** section remains available.
 - **Now Playing requires notification access.** This TV does not provide the screen to grant it. Permission
-  remains pending, and music playback with that access enabled has not been tested. Displaying access
-  instructions does not grant permission.
+  requires explicit authorization and is not granted by installing an update. Activation and playback
+  verification are recorded in the update reports. Access is enabled on the reference TV; the installed
+  2.5.3 build displays a real YouTube title as a resume card outside YouTube. Seeking and music-app playback
+  are not established by that check.
 - **Up Next depends on the apps.** It reads Android TV's list and fills gaps with recent apps. Resetting it
   hides earlier activity in Luma; it does not delete history from Netflix, HBO Max, or other accounts.
 - **House Control TV is optional.** The integration comes from the original project and requires House Control
@@ -165,7 +173,8 @@ LUMA_DEVICE=TV_IP:5555 bash tools/test-tv.sh
 ```
 
 The suite builds `dev.luma.tv.qa` as `dist/luma-tv-qa.apk`, grants only TV listing read access to that copy, and
-checks eight UI cases. It then removes QA and restores the previous Home app. It does not change production
+checks twenty-one UI, media-session, and key-handling cases. It also records focus animation frame times.
+It then removes QA and restores the previous Home app. It does not change production
 preferences or overwrite `dist/luma-tv.apk`. `LUMA_ADB` selects the executable and `LUMA_ADB_PORT` selects the
 server port, which defaults to 5038 for this environment. The suite expects the notification access screen
 to be unavailable, an input named HDMI 1, and at least eight installed apps.
@@ -179,7 +188,7 @@ paths. The normal installation uses the defaults: `dev.luma.tv` and `dist/luma-t
 
 ## Privacy
 
-Luma does not include analytics, its own account system, or an accessibility service. Apps, favorites, the
+Luma does not include analytics or its own account system. Apps, favorites, the
 name, and settings are stored on the TV. Up Next reads data published by apps on Android TV and loads artwork
 from their references. Resetting it saves a local cutoff date and clears the local recent-app log.
 
@@ -191,13 +200,22 @@ Now Playing declares a notification listener to access media sessions. Its imple
 or store notifications, although the permission granted by Android has a broader scope. Building or updating
 the APK does not enable it.
 
+The media listener also observes media-session changes while Home is off screen. The latest title, source
+app, artist/subtitle, artwork reference, duration, and position are saved locally for the resume card. A
+bitmap supplied without a URI is retained in memory. A remembered session is presented as **Resume**;
+unavailable skip controls are hidden. Resuming opens the source app; the app owns playback and seeking.
+
+The optional **Luma Input button** accessibility service receives key events and consumes only Input. It
+does not request window contents or accessibility events, and it does not store other keys. It stays
+inactive until explicitly enabled in Android.
+
 ## Origin, assets, and license
 
 The original project is [0xProbabillity/luma-tv](https://github.com/0xProbabillity/luma-tv), created by
 [@0xProbabillity](https://x.com/0xProbabillity). Its [MIT license](LICENSE) and asset attribution are preserved.
 Luma is not affiliated with Google, Apple, Netflix, or TV manufacturers.
 
-App names and assets belong to their respective owners. Netflix uses assets from its installed app;
+App names and assets belong to their respective owners. YouTube and Netflix use assets from their installed apps;
 some other icons retain drawn representations from the original project.
 
 - **Fjord / Dusk:** an image created for the original project and split into layers for the depth effect.

@@ -1,4 +1,5 @@
 <resources>
     <!-- Replaced at build time by LUMA_GREETING or .local/greeting.txt (build.sh). -->
     <string name="greeting">Hello</string>
+    <string name="input_key_service_description">Opens Luma inputs with the remote Input button. Only the Input key is handled. Screen contents are not accessed. Enable only if the remote button does not work with your TV launcher.</string>
 </resources>

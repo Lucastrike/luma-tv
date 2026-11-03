@@ -56,5 +56,6 @@ auxiliares y la conservación de los demás paquetes. También se realizó una a
 la instalación la aceptó y mantuvo los favoritos y la ubicación elegida en la pantalla de inicio. El acceso a notificaciones
 quedó sin cambios. No se hizo ningún commit durante esta sustitución.
 
-Los límites del botón Input y del acceso de Now Playing siguen descritos en
-[el informe de correcciones](fixes-2026-11-03.md). Cambiar la firma e instalar el fork no los resuelve por sí solo.
+La activación autorizada de Input y Now Playing se describe en [el informe de 2.5.2](fixes-2.5.2.md).
+El vídeo conservado, la navegación por foco y los cambios visuales posteriores se describen en
+[el informe de 2.5.3](fixes-2.5.3.md). La firma y el procedimiento de actualización son los mismos.

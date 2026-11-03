@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.luma.tv" android:versionCode="28" android:versionName="2.5.1">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.luma.tv" android:versionCode="30" android:versionName="2.5.3">
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Home widgets (2.3): Up Next reads Android TV's Continue watching list; Control shows the connection. -->
     <uses-permission android:name="android.permission.READ_TV_LISTINGS" />
@@ -18,15 +18,21 @@
         <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LEANBACK_LAUNCHER" /></intent>
         <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent>
         <intent><action android:name="android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS" /></intent>
+        <intent><action android:name="android.settings.ACCESSIBILITY_SETTINGS" /></intent>
     </queries>
     <application android:label="Luma TV" android:icon="@drawable/app_icon" android:banner="@drawable/app_banner" android:theme="@style/AppTheme" android:allowBackup="false" android:hardwareAccelerated="true" android:supportsRtl="true" android:usesCleartextTraffic="true">
         <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTask" android:screenOrientation="landscape" android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize" android:windowSoftInputMode="adjustNothing" android:excludeFromRecents="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /><category android:name="android.intent.category.LEANBACK_LAUNCHER" /></intent-filter>
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.HOME" /><category android:name="android.intent.category.DEFAULT" /></intent-filter>
         </activity>
-        <!-- Lets Now Playing see media sessions. Reads no notifications (MediaListener overrides nothing). -->
+        <!-- Observes media sessions for Now Playing and its local resume card; no notification payloads. -->
         <service android:name=".MediaListener" android:label="Luma Now Playing" android:exported="true" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter>
+        </service>
+        <!-- Optional Input remapping; inactive until explicitly enabled in Android accessibility settings. -->
+        <service android:name=".InputKeyService" android:label="Luma Input button" android:exported="true" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/input_key_service" />
         </service>
     </application>
 </manifest>
