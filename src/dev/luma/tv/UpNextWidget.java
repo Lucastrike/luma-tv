@@ -27,6 +27,8 @@ final class UpNextWidget extends Widget {
     static final String LISTINGS="android.permission.READ_TV_LISTINGS";
     static final int SLOTS=3;
     static final float PAD=18,GAP_X=12,CARD_Y=38;
+    /** A local cutoff: resetting Luma never edits other apps' Watch Next rows or account history. */
+    static void reset(SharedPreferences prefs,long at){prefs.edit().putLong("upnext_reset_at",at).remove("recent").apply();synchronized(posters){posters.clear();}}
     /** Posters already decoded, by link: Home rebuilds often (every return from an app), posters rarely change. */
     static final LinkedHashMap<String,Bitmap> posters=new LinkedHashMap<String,Bitmap>(16,.75f,true){@Override protected boolean removeEldestEntry(Map.Entry<String,Bitmap> e){return size()>12;}};
     static final class Item{String key,title,line,detail,pkg,art;Intent intent;float progress=-1;boolean app,allow;}
@@ -45,7 +47,8 @@ final class UpNextWidget extends Widget {
     }
     @Override void refresh(){
         final Context app=getContext().getApplicationContext();
-        WidgetBoard.IO.execute(()->{ArrayList<Item> items=load(app);post(()->show(items));});
+        final long reset=host.prefs().getLong("upnext_reset_at",0);
+        WidgetBoard.IO.execute(()->{ArrayList<Item> items=load(app);post(()->{if(reset==host.prefs().getLong("upnext_reset_at",0))show(items);});});
     }
 
     private ArrayList<Item> load(Context context){
@@ -75,6 +78,7 @@ final class UpNextWidget extends Widget {
             ArrayList<Object[]> rows=new ArrayList<>();
             while(c.moveToNext()){
                 if(!c.isNull(13)&&c.getInt(13)==0)continue;
+                long reset=host.prefs().getLong("upnext_reset_at",0);if(reset>0&&c.getLong(11)<=reset)continue;
                 String pkg=c.getString(1);if(pkg==null||host.app(pkg)==null)continue;
                 rows.add(new Object[]{c.getLong(11),c.getLong(0),pkg,c.getString(2),c.getString(3),c.getString(4),c.getString(5),c.getString(7)!=null?c.getString(7):c.getString(6),c.getString(8),c.getLong(9),c.getLong(10),c.getInt(12)});
             }
@@ -103,12 +107,12 @@ final class UpNextWidget extends Widget {
                 UsageStatsManager usage=(UsageStatsManager)context.getSystemService(Context.USAGE_STATS_SERVICE);
                 ArrayList<UsageStats> stats=new ArrayList<>(usage.queryAndAggregateUsageStats(now-14L*86400000L,now).values());
                 Collections.sort(stats,(a,b)->Long.compare(b.getLastTimeUsed(),a.getLastTimeUsed()));
-                for(UsageStats s:stats){String pkg=s.getPackageName();if(s.getTotalTimeInForeground()<15000||skip(context,pkg))continue;out.add(pkg);lastUsed.put(pkg,s.getLastTimeUsed());}
+                for(UsageStats s:stats){String pkg=s.getPackageName();if(s.getLastTimeUsed()<=host.prefs().getLong("upnext_reset_at",0)||s.getTotalTimeInForeground()<15000||skip(context,pkg))continue;out.add(pkg);lastUsed.put(pkg,s.getLastTimeUsed());}
             }
         }catch(RuntimeException ignored){}
         for(String entry:host.prefs().getString("recent","").split(",")){
             String[] f=entry.split(":");if(f.length!=2||out.contains(f[0])||skip(context,f[0]))continue;
-            try{long at=Long.parseLong(f[1]);int i=0;while(i<out.size()&&lastUsed.getOrDefault(out.get(i),0L)>at)i++;out.add(i,f[0]);lastUsed.put(f[0],at);}catch(NumberFormatException ignored){}
+            try{long at=Long.parseLong(f[1]);if(at<=host.prefs().getLong("upnext_reset_at",0))continue;int i=0;while(i<out.size()&&lastUsed.getOrDefault(out.get(i),0L)>at)i++;out.add(i,f[0]);lastUsed.put(f[0],at);}catch(NumberFormatException ignored){}
         }
         return out;
     }

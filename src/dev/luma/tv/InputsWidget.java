@@ -13,7 +13,7 @@ import java.util.*;
  *  Only TVs list inputs: a TV stick has none (it is plugged into one), so there the widget is not offered. */
 final class InputsWidget extends Widget {
     static final float PAD=18,GAP=12;
-    static final class Input{String id,name,glyph,vendor,port="";boolean tuner,cec,made;int state,color=0xFF0A84FF;}
+    static final class Input{String id,name,glyph,vendor,service,port="";boolean tuner,cec,made;int state,color=0xFF0A84FF;}
     /** QA: am start -n dev.luma.tv/.MainActivity --es luma.inputs demo|off shows made-up consoles on the first ports
      *  of a TV with inputs, to see the recognised look without the devices (not saved; switching still works). */
     static volatile boolean demo;
@@ -36,7 +36,7 @@ final class InputsWidget extends Widget {
             boolean passthrough=info.isPassthroughInput(),tuner=info.getType()==TvInputInfo.TYPE_TUNER&&!passthrough;
             if(!passthrough&&!tuner)continue;
             TvInputInfo shown=passthrough&&child.containsKey(info.getId())?child.get(info.getId()):info;
-            Input in=new Input();in.id=shown.getId();in.tuner=tuner;in.cec=shown!=info;in.vendor=info.getServiceInfo().packageName;
+            Input in=new Input();in.id=shown.getId();in.tuner=tuner;in.cec=shown!=info;in.vendor=info.getServiceInfo().packageName;in.service=info.getServiceInfo().name;
             in.name=label(shown,context);if(tuner&&(in.name.isEmpty()||in.name.matches("(?i)tv|tuner|antenna|atv|dtv")))in.name="Live TV";
             try{in.state=manager.getInputState(shown.getId());}catch(RuntimeException e){in.state=TvInputManager.INPUT_STATE_CONNECTED;}
             if(tuner)in.glyph="antenna";
@@ -46,7 +46,11 @@ final class InputsWidget extends Widget {
         }
         Collections.sort(out,(a,b)->natural(a.cec?a.port:a.name,b.cec?b.port:b.name));
         if(demo)pretend(out);
-        for(Input t:tuners)if(vendors.contains(t.vendor))out.add(t);
+        // Some TVs publish analogue and digital hardware under the same service and label.
+        // One Live TV tile opens the TV app, which owns the choice of tuner mode.
+        HashSet<String> tunerLabels=new HashSet<>();
+        Collections.sort(tuners,(a,b)->a.id.compareTo(b.id));
+        for(Input t:tuners)if(vendors.contains(t.vendor)&&tunerLabels.add(t.vendor+":"+t.service+":"+t.name.toLowerCase(Locale.ROOT)))out.add(t);
         while(out.size()>6)out.remove(out.size()-1);
         count=out.size();return out;
     }
@@ -116,9 +120,13 @@ final class InputsWidget extends Widget {
             t.set(state,hero,!in.tuner&&in.state==TvInputManager.INPUT_STATE_CONNECTED);
         }
     }
+    static Intent intent(Input in){
+        // A tuner is not a passthrough input. Open Live TV's channel directory so it can resume its own mode.
+        return new Intent(Intent.ACTION_VIEW).setDataAndType(in.tuner?TvContract.Channels.CONTENT_URI:TvContract.buildChannelUriForPassthroughInput(in.id),in.tuner?TvContract.Channels.CONTENT_TYPE:TvContract.Channels.CONTENT_ITEM_TYPE);
+    }
     private void open(Input in){
         if(in.id.startsWith("promo:"))return;
-        Intent view=new Intent(Intent.ACTION_VIEW,TvContract.buildChannelUriForPassthroughInput(in.id));
+        Intent view=intent(in);
         try{host.activity().startActivity(view);host.activity().overridePendingTransition(0,0);}
         catch(ActivityNotFoundException e){host.start(new Intent(android.provider.Settings.ACTION_SETTINGS));}
     }

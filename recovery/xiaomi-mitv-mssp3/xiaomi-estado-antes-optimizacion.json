@@ -1,0 +1,18 @@
+{
+  "date": "2026-11-03",
+  "serial": null,
+  "original_home": "com.google.android.tvlauncher/.MainActivity",
+  "packages": {
+    "com.miui.tv.analytics": 0,
+    "com.xiaomi.statistic": 0,
+    "com.google.android.tvlauncher": 0,
+    "com.mitv.tvhome.atv": 0
+  },
+  "animations": {
+    "window_animation_scale": "1.0",
+    "transition_animation_scale": "1.0",
+    "animator_duration_scale": "null"
+  },
+  "flauncher_present_before": false,
+  "model": "MiTV-MSSP3"
+}

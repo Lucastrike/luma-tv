@@ -1,276 +1,211 @@
-<p align="center">
-  <img src="docs/home.jpg" width="900" alt="Luma's Home by day: Hello, Alex with the date, five round scene buttons, a 3D model of the home floating on pale silver silk and a row of favourite apps">
-</p>
+# Luma TV · Lucastrike fork
 
-<h1 align="center">Luma</h1>
+An Android TV and Google TV launcher based on [Luma by 0xProbabillity](https://github.com/0xProbabillity/luma-tv).
+This fork maintains our fixes and an installation signed with our own key.
 
-<p align="center">
-  A calm, tvOS-inspired home screen for Android TV and Google TV.<br>
-  Your favourite apps over living wallpapers, with no ads, no sponsored rows and no tracking.
-</p>
+The current version is **2.5.1**, with the package ID **`dev.luma.tv`**. On the reference Xiaomi P1E, it replaces
+the original author's installation and serves as the default Home app. Subsequent updates use the same
+signing key and preserve application data.
 
 <p align="center">
-  <a href="#install"><b>Install</b></a> &nbsp;·&nbsp;
-  <a href="#make-luma-your-home-screen"><b>Make it your home screen</b></a> &nbsp;·&nbsp;
-  <a href="#support-the-project"><b>Support the project</b></a>
+  <img src="docs/home.jpg" width="900" alt="Original Luma promotional image showing favorite apps, scenes, and a house view">
 </p>
 
-<p align="center">
-  Made by <a href="https://x.com/0xProbabillity">@0xProbabillity</a>
-</p>
+The image above comes from the original project. It shows its promotional demo with House Control TV;
+it is not a screenshot of our installation. Content, devices, and music in other images under `docs/`
+may also come from that demo.
 
-## What it does
+## What this fork adds
 
-Luma works on its own: it needs no smart home, account or other app. Everything below except the scene block
-works on any Android TV.
-
-- **A quiet Home.** A greeting with today's date, your favourite apps as large cards, and nothing you did not put
-  there. Moving to an app shows its name and a line about it; hold OK on any app to show it on Home, move it or
-  hide it.
-- **Home widgets, page by page.** Above your apps, Home can show *Up Next* (the shows and videos you were
-  watching, from the Continue watching list that YouTube, Netflix and other apps share with Android TV: OK
-  resumes where you stopped), *Weather* (now, the next hours or the coming days, for the city your TV is in or any city you pick), *Now Playing* (music playing on
-  the TV, with play, pause and skip), *Inputs* (on a TV: its HDMI ports and live TV; a PlayStation, Xbox, Nintendo
-  Switch, Apple TV, Chromecast, Fire TV, soundbar and more are recognised over HDMI-CEC and shown under their own
-  name and colour; OK switches to it and Home comes back) and *Control* (Wi-Fi, picture and sound,
-  accessories, settings). Left and Right turn the pages; your apps stay underneath.
-- **Every app, one tab away.** *Apps* lists everything installed on the TV, hidden apps included.
-- **Light by day, dark at night.** The default wallpaper, *Silver*, is pale silver silk from sunrise to sunset and
-  graphite silk after dark, and the whole interface turns light or dark with it. Sunrise and sunset are worked out
-  for your TV's time zone, with no location permission and no network.
-- **Living wallpapers.** Eight of them, from silver silk and a Norwegian fjord at dusk to the Milky Way. On the
-  fjord, clouds drift and the water moves very slowly, with real depth: the sky and the mountains travel at
-  different speeds as you move. Everything pauses while an app is open.
-- **Feels like a TV, not a phone.** Springy focus, cards that tilt toward the direction you move, a pill that
-  slides along the tab bar, and soft, quiet navigation sounds. *Fluid motion* and *Navigation sounds* turn off
-  in Settings, and Android's own animation settings are respected.
-- **Your smart home, if you have one.** The scene block appears only when
-  [House Control TV](https://github.com/0xProbabillity/house-control-tv) is installed: Home then also shows five
-  round scene buttons and a live 3D model of your home floating on the wallpaper, and a scene can open an app as
-  the lights go down (*Movie* starts Netflix). Without it, Home is just your greeting and favourites over the wallpaper, and Luma picks House
-  Control up as soon as you install it.
-- **Easy to leave.** Settings → *Home screen* hands Home back to your TV's own launcher, and
-  `./luma.sh restore` undoes everything the installer changed.
-
-<p align="center">
-  <img src="docs/scenes.jpg" width="49%" alt="At night: the Cozy scene button in focus, with its description in the greeting, on graphite silk">
-  <img src="docs/wallpapers.jpg" width="49%" alt="The wallpaper picker previewing the Milky Way">
-  <img src="docs/settings.jpg" width="49%" alt="Settings in the light look: wallpaper, your name, clock, motion and sound">
-  <img src="docs/support.jpg" width="49%" alt="Settings → Support the author: four QR codes for tips in crypto">
-</p>
-
-<p align="center">
-  <img src="docs/widgets.jpg" width="100%" alt="Home widgets: Up Next with three videos and their progress, and the weather in Miami for the next hours">
-  <img src="docs/inputs.jpg" width="49%" alt="Inputs with a recognised PlayStation 5, Xbox Series X and Apple TV on HDMI 1 to 3, next to Now Playing">
-  <img src="docs/widget-editor.jpg" width="49%" alt="Settings → Home widgets: switches for each widget and miniature pages of Home">
-</p>
-<p align="center"><sub>Shown with Luma's promo demo (<code>--es luma.demo promo</code>): the videos, the song and the consoles are made up.</sub></p>
-
-## Requirements
-
-| | You need |
+| Change | Behavior |
 | --- | --- |
-| TV | Android TV or Google TV, Android 8.0 or newer, with **USB / network debugging** turned on (Settings → Device Preferences → About: press *Build* 7 times, then Developer options) |
-| Computer | macOS or Linux with [ADB](https://developer.android.com/tools/releases/platform-tools) (`brew install --cask android-platform-tools`) |
-| To build it | JDK 17, Android SDK build-tools 36.0.0 and platform `android-34`, Python 3. No Gradle |
+| Continuous app reordering | Hold OK → **Move**. Arrow keys change the position; OK saves and Back cancels. Starting from Home opens the full app grid so apps can move beyond the six favorites. |
+| Up Next management | **Settings → Up Next** explains the data sources and lets you reset what Luma displays. Later activity may appear again. |
+| TV inputs | Groups tuners with the same provider, service, and label. Preserves AV/HDMI names and opens the tuner as live TV. |
+| Netflix | Uses the installed app's banner, falling back to its icon, instead of drawing an N with a generic font. |
+| Now Playing access | Checks whether the permission screen exists. If unavailable, displays an explanation and the corresponding ADB command. |
+| Builds and tests | Supports custom package IDs and labels for test installations. The QA suite produces a separate APK from the production build. |
+| Xiaomi recovery | Includes the script, guide, and saved states needed to restore the reference TV's original configuration. |
 
-## Install
+Details and completed checks are recorded in the [fix report](docs/fixes-2026-11-03.md).
 
-Put the computer and the TV on the same network, then connect once (the TV asks you to allow it):
+## Status and limitations
 
-```bash
-adb connect 192.168.1.50:5555   # your TV's address: Settings → Network
+The tested reference device is a **Xiaomi P1E / MiTV-MSSP3 running Android 9**. The manifest supports
+Android 8.0 and later, but this does not establish compatibility with every TV.
+
+- **The physical Input button remains unresolved on this Xiaomi.** The firmware intercepts the key and tries
+  to open a panel inside Android TV Home, which is disabled to keep Luma as the Home app. Enabling it forces
+  Google's Home app back into use. Luma's handler works when it receives the event; that test does not validate
+  the physical remote's event path. The **Inputs** section remains available.
+- **Now Playing requires notification access.** This TV does not provide the screen to grant it. Permission
+  remains pending, and music playback with that access enabled has not been tested. Displaying access
+  instructions does not grant permission.
+- **Up Next depends on the apps.** It reads Android TV's list and fills gaps with recent apps. Resetting it
+  hides earlier activity in Luma; it does not delete history from Netflix, HBO Max, or other accounts.
+- **House Control TV is optional.** The integration comes from the original project and requires House Control
+  to trust Luma's signing certificate. It has not been validated with our key.
+
+Inherited features include favorites, the Apps tab, weather, input and control widgets, animated backgrounds,
+and appearance changes based on the time of day. Weather uses an automatically detected city or a location
+selected in **Settings → Weather location**.
+
+## Build and install
+
+To update **the TV already configured with our signing key**, follow
+[Our Luma build](docs/OWN_FORK.md). That guide includes the local SDK, JDK, and ADB paths, the port used for
+this TV, and the public certificate identity.
+
+To set up another environment, you need:
+
+- JDK 17 and Python 3.
+- Android SDK with `build-tools;36.0.0` and `platforms;android-34`.
+- [Android Platform Tools / ADB](https://developer.android.com/tools/releases/platform-tools).
+- A TV with debugging enabled and the computer's connection authorized.
+
+Clone this fork:
+
+```sh
+git clone https://github.com/Lucastrike/luma-tv.git
+cd luma-tv
 ```
 
-Download `luma-tv.apk` from [Releases](../../releases) and install it, or build and install it yourself:
+Before updating an existing installation, restore its signing key to `.signing/local.keystore` or set its
+location with `LUMA_KEYSTORE`. In a fresh clone, the first build generates a new key if none is found;
+that new identity cannot update our existing installation.
 
-```bash
-git clone https://github.com/0xProbabillity/luma-tv.git && cd luma-tv
-./luma.sh install
+Set the tool paths and build:
+
+```sh
+export ANDROID_SDK_ROOT=/path/to/android-sdk
+export LUMA_JDK=/path/to/jdk-17
+bash build.sh
 ```
 
-`./luma.sh build` only builds (`dist/luma-tv.apk`). With several devices connected, choose one:
-`./luma.sh -s 192.168.1.50:5555 install`, or set `LUMA_DEVICE`. `./luma.sh status` shows the TV, the installed
-version and which app opens at Home.
+The production output is `dist/luma-tv.apk`. The build does not use Gradle: it compiles Java and native views
+with `aapt2`, `javac`, and `d8`, then signs and verifies the APK with `apksigner`.
 
-The build looks for the Android SDK in `$ANDROID_SDK_ROOT` (default: Homebrew's `android-commandlinetools`) and
-for JDK 17 in `$LUMA_JDK`. It creates a signing key in `.signing/` the first time; keep it, or Android will refuse
-to update Luma with a build signed by another key (`LUMA_KEYSTORE` chooses a different one). The APK in Releases is
-signed with the project's release key, so switching between it and your own build means uninstalling first.
+With ADB on your `PATH`, connect and install using your TV's address:
 
-## Make Luma your home screen
-
-```bash
-./luma.sh home
+```sh
+adb connect TV_IP:5555
+adb -s TV_IP:5555 install --no-incremental -r dist/luma-tv.apk
 ```
 
-Android lets the user choose a home app, but many TVs (Google TV, and the Android TV firmware
-of many manufacturers) always put their own launcher first. `luma.sh home` makes Luma the default; when the TV still
-prefers its launcher, it switches that launcher off (with `pm disable-user`, which keeps it installed with all
-its data). It only ever touches the stock launchers it knows: Google TV's, the Android TV launcher, the
-Leanback launcher, and Google TV's setup "recovery" screen, which would otherwise take Home over. It never
-wakes a TV that is asleep.
+`-r` preserves data when the package ID and signature match. The original author's version and our fork share
+a package ID but have different signatures: switching between them requires an initial migration rather than
+an in-place update. The procedure we completed is documented in
+[our installation guide](docs/OWN_FORK.md#sustitución-inicial).
 
-To go back to your TV's own home screen:
+Keys, private backups, local tools, APKs, and TV logs are excluded from Git through `.signing/`, `.local/`,
+`build/`, and `dist/`. Keep a private backup of the signing key: future updates require it.
 
-```bash
-./luma.sh restore
+## Home app and recovery
+
+The inherited script can inspect the installation and manage the Home app when ADB is on your `PATH`:
+
+```sh
+./luma.sh -s TV_IP:5555 status
+./luma.sh -s TV_IP:5555 home
 ```
 
-It switches back on exactly what `home` switched off (it remembers per TV, in `.local/`) and makes the original
-launcher the default again. Luma stays installed; `adb uninstall dev.luma.tv` removes it. On a TV where the
-launcher was never switched off, Settings → *Home screen* → *Return to the TV's home screen* does the same from
-the couch.
+`home` tries to select Luma and disables recognized system launchers if the firmware continues to prioritize
+them. As the Input issue demonstrates, those packages may contain other TV functions. The state needed to
+undo these changes is saved per device under `.local/`.
 
-## Make it yours
+The generic `./luma.sh -s TV_IP:5555 restore` command reverses the script's own changes. For the
+**reference Xiaomi P1E**, use the [dedicated guide and script](recovery/xiaomi-mitv-mssp3/README.md)
+to restore the previous installation and settings:
 
-- **Greeting.** Home says "Hello". Settings → *Your name* makes it "Hello, Alex"; the name stays on the TV. To
-  build a different default greeting: `LUMA_GREETING="Hi there" ./luma.sh install`, or put the line in
-  `.local/greeting.txt` (ignored by git).
-- **Favourites.** Hold OK on an app → *Show on Home*, *Move left* / *right*, *Move to first position* or *Hide from Home*. The first-run order is in `FIRST` in
-  `MainActivity.java`.
-- **Home widgets.** Settings → *Home widgets*: OK turns a widget on or off, hold OK to move it. Small pages next
-  to the list show how Home will look. Settings → *Temperature* picks Celsius or Fahrenheit (automatic: by time
-  zone). Up Next and Now Playing ask for access the first time; `./luma.sh widgets` allows both, and usage access
-  for recent apps, from the computer in one go.
-- **Device recognition.** [`Devices.java`](src/dev/luma/tv/Devices.java) maps the name and vendor a device announces
-  over HDMI-CEC to a friendly name, glyph and colour; [`tools/DevicesTest.java`](tools/DevicesTest.java) checks it
-  without a TV. `adb shell am start -n dev.luma.tv/.MainActivity --es luma.inputs demo` shows made-up consoles on
-  a TV's ports to preview the look (`off` ends it).
-- **Scene apps.** With House Control TV installed, Settings → *Scene apps* chooses the app each scene opens, or
-  none.
-- **Forks.** The author, links and tip addresses shown in Settings → *About* and *Support the author* are in
-  [`res/raw/about.txt`](res/raw/about.txt) and [`res/raw/support.txt`](res/raw/support.txt);
-  `tools/support-qr.sh` redraws their QR codes (needs `qrencode`).
+```sh
+python3 recovery/xiaomi-mitv-mssp3/restaurar-xiaomi.py --dry-run
+```
+
+The `--dry-run` mode displays the plan without contacting the TV. An actual run enables the original Home app
+and PatchWall, restores the saved package and animation states, and removes Luma after verifying them.
+This backup covers configuration; it cannot recover original data or files that have been deleted.
+
+## Usage and customization
+
+- **Favorites:** hold OK on an app to open it, move it, send it to the beginning, show or hide it on Home,
+  or view its information.
+- **Widgets:** **Settings → Home widgets** enables, disables, and reorders sections. Hold OK to start moving
+  a widget, then use the up/down arrows to reposition it.
+- **Up Next:** **Settings → Up Next → Reset Up Next** resets its local presentation.
+- **Appearance:** configure backgrounds, the clock, name, motion, and sounds in **Settings**.
+- **Weather:** **Weather location** sets a city; **Temperature** selects Celsius or Fahrenheit.
+- **In-app attribution:** inherited credits and links are in
+  [`res/raw/about.txt`](res/raw/about.txt) and [`res/raw/support.txt`](res/raw/support.txt). Support recipients
+  shown in the interface belong to the original author; those donations do not go to this fork.
+
+The local recent-app log only records apps opened by Luma. With usage access, it can also query activity
+reported by Android. The inherited `./luma.sh widgets` command grants several permissions together—TV listings,
+notifications, and usage access—and is not needed to build or update the app.
+
+## Tests
+
+HDMI-CEC device recognition, without a TV:
+
+```sh
+mkdir -p build/test
+"$LUMA_JDK/bin/javac" -d build/test src/dev/luma/tv/Devices.java tools/DevicesTest.java
+"$LUMA_JDK/bin/java" -cp build/test dev.luma.tv.DevicesTest
+```
+
+Recovery checks, with simulated ADB:
+
+```sh
+python3 -m unittest discover -s recovery/xiaomi-mitv-mssp3 -p 'test_*.py'
+```
+
+Regression tests on the connected Xiaomi, with the tools configured:
+
+```sh
+LUMA_DEVICE=TV_IP:5555 bash tools/test-tv.sh
+```
+
+The suite builds `dev.luma.tv.qa` as `dist/luma-tv-qa.apk`, grants only TV listing read access to that copy, and
+checks eight UI cases. It then removes QA and restores the previous Home app. It does not change production
+preferences or overwrite `dist/luma-tv.apk`. `LUMA_ADB` selects the executable and `LUMA_ADB_PORT` selects the
+server port, which defaults to 5038 for this environment. The suite expects the notification access screen
+to be unavailable, an input named HDMI 1, and at least eight installed apps.
+
+The Input case dispatches the event inside the activity. Input intents are checked for resolution; this does
+not establish that an HDMI signal or TV tuning works. These limitations and the results are described in
+[the verification report](docs/fixes-2026-11-03.md#verificación).
+
+`LUMA_PACKAGE`, `LUMA_LABEL`, and `LUMA_APK` support other test builds with their own identities and output
+paths. The normal installation uses the defaults: `dev.luma.tv` and `dist/luma-tv.apk`.
 
 ## Privacy
 
-Luma has no analytics, advertising ID, accessibility service or account. The list of apps, your favourites,
-your name and settings stay on the TV. Day and night come from the TV's clock and time zone, not its location. It goes online for these things only: House Control TV on the TV itself (`127.0.0.1`), for the
-3D preview, and only when House Control is installed (that web view refuses every other address); the weather,
-from [Open-Meteo](https://open-meteo.com) (no account or key; the request carries only the rounded coordinates of
-the city); the city itself, which Luma asks [GeoJS](https://www.geojs.io) (or [ipwho.is](https://ipwho.is) if it
-does not answer) for at most twice a day, like any weather website, from the TV's internet address and with no
-location permission. A guess whose time zone does not keep the TV's time, as behind a VPN, is ignored for your
-time zone's main city. Settings → *Weather location* pins a city instead, and then no lookup is made; its search
-sends what you type to Open-Meteo. And the poster pictures that your apps link in their Continue
-watching list. Up Next reads that list on the TV. Now Playing needs notification access only because Android hands
-media controls to notification listeners; Luma reads no notifications. The scene
-buttons talk to House Control over Android's Binder, and House Control only answers a Luma signed with the key it
-trusts. Luma never sees a password or token.
+Luma does not include analytics, its own account system, or an accessibility service. Apps, favorites, the
+name, and settings are stored on the TV. Up Next reads data published by apps on Android TV and loads artwork
+from their references. Resetting it saves a local cutoff date and clears the local recent-app log.
 
-## How it is built
+Weather queries [Open-Meteo](https://open-meteo.com); automatic location uses GeoJS or ipwho.is based on the
+TV's network connection. Setting a city avoids that automatic lookup. Day/night calculations use the clock
+and time zone. House Control, when installed, uses a local connection and Binder.
 
-Plain Java and Android views, no third-party libraries, compiled by `build.sh` with `aapt2`, `javac` and `d8`.
-The sounds are synthesised by [`tools/generate_sounds.py`](tools/generate_sounds.py). Motion is native property
-animation tuned for small TV chips: on a 2 GB TV stick, moving around Home keeps a steady frame rate.
+Now Playing declares a notification listener to access media sessions. Its implementation does not process
+or store notifications, although the permission granted by Android has a broader scope. Building or updating
+the APK does not enable it.
 
-### Wallpapers
+## Origin, assets, and license
 
-- **Fjord**: an original image made with an AI image generator for this project, split into a sky and a terrain
-  layer for the depth effect. **Dusk** is the same view in a darker evening grade.
-- **Milky Way**, **Calm Sea** and **Dawn**: views of the CC0 panoramas
+The original project is [0xProbabillity/luma-tv](https://github.com/0xProbabillity/luma-tv), created by
+[@0xProbabillity](https://x.com/0xProbabillity). Its [MIT license](LICENSE) and asset attribution are preserved.
+Luma is not affiliated with Google, Apple, Netflix, or TV manufacturers.
+
+App names and assets belong to their respective owners. Netflix uses assets from its installed app;
+some other icons retain drawn representations from the original project.
+
+- **Fjord / Dusk:** an image created for the original project and split into layers for the depth effect.
+- **Milky Way, Calm Sea, and Dawn:** views from the Poly Haven CC0 panoramas
   [Rogland Clear Night](https://polyhaven.com/a/rogland_clear_night),
-  [Kloppenheim 06 (Pure Sky)](https://polyhaven.com/a/kloppenheim_06_puresky) and
-  [Kiara 1 Dawn](https://polyhaven.com/a/kiara_1_dawn) from [Poly Haven](https://polyhaven.com), reprojected by
+  [Kloppenheim 06](https://polyhaven.com/a/kloppenheim_06_puresky), and
+  [Kiara 1 Dawn](https://polyhaven.com/a/kiara_1_dawn), processed by
   [`artwork/reproject.py`](artwork/reproject.py).
-- **Silver**: the same drape rendered twice in Blender, pale and graphite, by
-  [`artwork/silver_silk.py`](artwork/silver_silk.py); [`artwork/silver_assets.py`](artwork/silver_assets.py) makes
-  the wallpapers and the day/night thumbnail. [`tools/zones.py`](tools/zones.py) writes the time-zone table used
-  for sunrise and sunset (from the public-domain `zone.tab`).
-- **Silk**: rendered in Blender by [`artwork/silk.py`](artwork/silk.py).
-- **Graphite**: plain dark, for when you want nothing at all.
-
-## Support the project
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/support/banner-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="docs/support/banner-light.svg">
-  <img src="docs/support/banner-light.svg" width="100%" alt="Support Luma">
-</picture>
-
-Luma is free and has no ads. If it earned a place on your TV, a tip in crypto
-helps it keep growing: more TVs, more polish, quicker fixes. Thank you! A star, a bug report or a
-pull request helps just as much.
-
-Scan a code with your wallet, or copy an address with the button in the corner of its box.
-
-> [!IMPORTANT]
-> Send each coin only over the network named next to its address. Coins sent over another network may be lost.
-
-<table>
-  <tr>
-    <td align="center" width="196">
-      <img src="docs/support/qr-bitcoin.svg" width="168" alt="QR code of the Bitcoin address">
-    </td>
-    <td>
-      <img src="docs/support/bitcoin.svg" width="28" height="28" align="absmiddle" alt="">&nbsp;
-      <b>Bitcoin</b>
-      <br><sub>BTC · native SegWit (bech32) address</sub>
-
-```text
-bc1q07hfz95crdalcrnywjavdpc4pdvllct83as5re
-```
-
-</td>
-  </tr>
-  <tr>
-    <td align="center" width="196">
-      <img src="docs/support/qr-evm.svg" width="168" alt="QR code of the Ethereum, Base, BNB Chain and Arbitrum address">
-    </td>
-    <td>
-      <img src="docs/support/ethereum.svg" width="28" height="28" align="absmiddle" alt="">
-      <img src="docs/support/base.svg" width="28" height="28" align="absmiddle" alt="">
-      <img src="docs/support/bnb.svg" width="28" height="28" align="absmiddle" alt="">
-      <img src="docs/support/arbitrum.svg" width="28" height="28" align="absmiddle" alt="">&nbsp;
-      <b>Ethereum · Base · BNB Chain · Arbitrum</b>
-      <br><sub>One address on all four networks · ETH, BNB, USDT, USDC and other tokens</sub>
-
-```text
-0x4ed3aF428e938a0CC8e60df86D714B4a7F0928F0
-```
-
-</td>
-  </tr>
-  <tr>
-    <td align="center" width="196">
-      <img src="docs/support/qr-ton.svg" width="168" alt="QR code of the TON address">
-    </td>
-    <td>
-      <img src="docs/support/ton.svg" width="28" height="28" align="absmiddle" alt="">&nbsp;
-      <b>TON</b>
-      <br><sub>Toncoin and USDT on TON · no memo needed</sub>
-
-```text
-UQBCDKDp11tBIwTon4ItzTPcQgNGcaqTM6Gn31KwSN7qWdmM
-```
-
-</td>
-  </tr>
-  <tr>
-    <td align="center" width="196">
-      <img src="docs/support/qr-tron.svg" width="168" alt="QR code of the TRON address">
-    </td>
-    <td>
-      <img src="docs/support/tron.svg" width="28" height="28" align="absmiddle" alt="">&nbsp;
-      <b>TRON</b>
-      <br><sub>TRX and USDT (TRC-20)</sub>
-
-```text
-TWtWLJp2Hc6242RynhU1B4Uujru3tppb3B
-```
-
-</td>
-  </tr>
-</table>
-
-## Acknowledgements and disclaimer
-
-Inspired by the focus and spacing of Apple's tvOS. App names and icons belong to their owners; Luma shows the
-icons and banners each installed app provides. The network logos under
-[Support the project](#support-the-project) are from [Web3 Icons](https://github.com/0xa3k5/web3icons) (MIT).
-Luma is not affiliated with Google, Apple or any TV maker.
-
-## License
-
-[MIT](LICENSE)
+- **Silver / Silk:** backgrounds rendered by the scripts under [`artwork/`](artwork).
+- **Sounds:** synthesized by [`tools/generate_sounds.py`](tools/generate_sounds.py).
+- **Original author support icons:** [Web3 Icons](https://github.com/0xa3k5/web3icons), licensed under MIT.

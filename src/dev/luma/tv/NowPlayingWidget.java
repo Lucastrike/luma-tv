@@ -11,6 +11,7 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.provider.Settings;
 import android.view.*;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -166,9 +167,16 @@ final class NowPlayingWidget extends Widget {
         for(int i=0;i<apps.size();i++){final String pkg=apps.get(i);
             String[] hero=pkg.equals("@allow")?null:new String[]{"music:open:"+pkg,appName(pkg),"Open "+appName(pkg)+" and start something. It will show up here, with play, pause and skip."};
             TextView p=pill(pkg.equals("@allow")?"Allow access":appName(pkg),i,hero,()->{
-                if(pkg.equals("@allow"))host.start(new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"));else host.launch(pkg);});
+                if(pkg.equals("@allow"))allowAccess();else host.launch(pkg);});
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,px(32));lp.rightMargin=px(8);lp.topMargin=px(1);shortcuts.addView(p,lp);}
         if(hadFocus&&shortcuts.getChildCount()>0)shortcuts.getChildAt(0).requestFocus();
+    }
+    private void allowAccess(){
+        Intent settings=new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
+        if(settings.resolveActivity(getContext().getPackageManager())!=null){
+            try{host.activity().startActivity(settings);return;}catch(ActivityNotFoundException|SecurityException ignored){}
+        }
+        host.notice("Enable with ADB","Notification access settings are unavailable on this TV.\n\nOn a connected computer:\nadb shell cmd notification allow_listener "+listener.flattenToString());
     }
     private void progress(){
         if(Promo.on){long d=Promo.SONG_LENGTH,p=Promo.position();track.setVisibility(VISIBLE);fill.setVisibility(VISIBLE);fill.setScaleX(p/(float)d);elapsed.setText(time(p));remaining.setText("−"+time(d-p));return;}

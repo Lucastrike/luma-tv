@@ -30,7 +30,7 @@ final class WidgetBoard extends FrameLayout {
         View houseEntry(int direction);
         void nudgeHouse(int direction);
         MainActivity.App app(String pkg);View art(String pkg);
-        void launch(String pkg);void start(Intent intent);
+        void launch(String pkg);void start(Intent intent);void notice(String title,String message);
         SharedPreferences prefs();Activity activity();
     }
     static String title(String id){switch(id){case "house":return "Smart Home";case "inputs":return "Inputs";case "upnext":return "Up Next";case "weather":return "Weather";case "music":return "Now Playing";default:return "Control";}}

@@ -1,0 +1,19 @@
+{
+  "captured_at": "2026-11-03T12:36:37.590211+01:00",
+  "serial": null,
+  "model": "MiTV-MSSP3",
+  "packages": {
+    "com.miui.tv.analytics": 3,
+    "com.xiaomi.statistic": 3,
+    "com.google.android.tvlauncher": 3,
+    "com.mitv.tvhome.atv": 3,
+    "me.efesser.flauncher": 0
+  },
+  "animations": {
+    "window_animation_scale": "0.5",
+    "transition_animation_scale": "0.5",
+    "animator_duration_scale": "0.5"
+  },
+  "luma_path": "",
+  "home": "me.efesser.flauncher/.MainActivity"
+}

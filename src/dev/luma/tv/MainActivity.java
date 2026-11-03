@@ -39,6 +39,10 @@ public final class MainActivity extends Activity {
     private ScrollView scroll;
     private LinearLayout rows;
     private String page = "home", selectedPackage = "com.google.android.youtube.tv";
+    private String movingApp;
+    private String movingReturnPage;
+    private ArrayList<String> movingOrder;
+    private TextView moveHint;
     private JSONObject lastHome;
     private View sceneVeil;
     private TextView brand;
@@ -120,6 +124,7 @@ public final class MainActivity extends Activity {
         if(board!=null){board.setActive(true);board.refresh();}
     }
     @Override protected void onPause() {
+        if(movingApp!=null)finishMoving(false);
         super.onPause(); if(houseWidgets!=null)houseWidgets.setActive(false); if(board!=null)board.setActive(false); started = false; handler.removeCallbacks(clockTick); handler.removeCallbacks(daylightTick);
         if(!sceneTransition){content.animate().cancel();content.setAlpha(1);}
         for(Tile tile:tiles) tile.movement.snap();
@@ -262,7 +267,7 @@ public final class MainActivity extends Activity {
                 Intent query = new Intent(Intent.ACTION_MAIN).addCategory(category);
                 for (ResolveInfo info : pm.queryIntentActivities(query, 0)) {
                     String pkg=info.activityInfo.packageName;
-                    if (pkg.equals(getPackageName()) || Arrays.asList(STOCK_HOMES).contains(pkg) || !seen.add(pkg)) continue;
+                    if (pkg.equals(getPackageName()) || pkg.equals("dev.luma.tv") || pkg.equals("dev.luma.tv.qa") || Arrays.asList(STOCK_HOMES).contains(pkg) || !seen.add(pkg)) continue;
                     if (pm.getLaunchIntentForPackage(pkg)==null && pm.getLeanbackLaunchIntentForPackage(pkg)==null) continue;
                     try {
                         App app = new App(); app.pkg=pkg;
@@ -308,6 +313,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showPage(String next, boolean focus) {
+        if(movingApp!=null)endMoving(false,false);
         String previous=page;
         boolean transition=loaded && !previous.equals(next) && motion();
         for(Animator animation:pageAnimations)animation.cancel();pageAnimations.clear();
@@ -475,6 +481,7 @@ public final class MainActivity extends Activity {
         public View art(String pkg){App a=appIndex.get(pkg);return a==null?null:new Art(a);}
         public void launch(String pkg){App a=appIndex.get(pkg);if(a!=null)MainActivity.this.launch(a);else Toast.makeText(MainActivity.this,"This app is not installed.",Toast.LENGTH_SHORT).show();}
         public void start(Intent intent){try{startActivity(intent);overridePendingTransition(0,0);}catch(RuntimeException e){Toast.makeText(MainActivity.this,"This can't be opened on this TV.",Toast.LENGTH_SHORT).show();}}
+        public void notice(String title,String message){MainActivity.this.notice(title,message);}
         public SharedPreferences prefs(){return prefs;}
         public Activity activity(){return MainActivity.this;}
     };
@@ -760,18 +767,92 @@ public final class MainActivity extends Activity {
 
     private void appMenu(App app) {
         Set<String> hidden=new HashSet<>(prefs.getStringSet("hidden",Collections.emptySet()));
-        String[] choices={"Open", "Move to first position", "Move left", "Move right", hidden.contains(app.pkg) ? "Show on Home" : "Hide from Home", "App info"};
+        String[] choices={"Open", "Move", "Move to first position", hidden.contains(app.pkg) ? "Show on Home" : "Hide from Home", "App info"};
         menu(app.label,choices,-1,index-> {
             if (index==0) { launch(app); return; }
-            ArrayList<String> ids=order(); int current=ids.indexOf(app.pkg);
-            if (index==1) { ids.remove(app.pkg); ids.add(0,app.pkg); hidden.remove(app.pkg); }
-            if (index==2 && current>0) Collections.swap(ids,current,current-1);
-            if (index==3 && current<ids.size()-1) Collections.swap(ids,current,current+1);
-            if (index==4) { if (hidden.contains(app.pkg)) hidden.remove(app.pkg); else hidden.add(app.pkg); }
-            if (index==5) { startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:"+app.pkg))); return; }
+            if (index==1) { beginMoving(app);return; }
+            ArrayList<String> ids=order();
+            if (index==2) { ids.remove(app.pkg); ids.add(0,app.pkg); hidden.remove(app.pkg); }
+            if (index==3) { if (hidden.contains(app.pkg)) hidden.remove(app.pkg); else hidden.add(app.pkg); }
+            if (index==4) { startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:"+app.pkg))); return; }
             prefs.edit().putString("order",String.join(",",ids)).putStringSet("hidden",hidden).apply();
             selectedPackage=app.pkg;showPage(page,true);
         });
+    }
+
+    /** Pick up once, move with the D-pad, then OK saves or Back cancels. The page stays mounted. */
+    private void beginMoving(App app){
+        String back=page;
+        // Home only shows six favourites; the full Apps grid lets a card travel beyond those six slots.
+        if(page.equals("home")){selectedPackage=app.pkg;showPage("apps",false);}
+        movingReturnPage=back;
+        movingApp=app.pkg;movingOrder=order();
+        moveHint=text("Move with the arrows  ·  OK: save  ·  Back: cancel",14,ink(0xFF),"sans-serif-medium");
+        moveHint.setGravity(Gravity.CENTER);moveHint.setBackground(shape(glass(),14));moveHint.setTranslationZ(px(40));
+        root.addView(moveHint,pos(760,34,100,158));
+        for(Tile tile:tiles)if(tile.app.pkg.equals(movingApp)){
+            tile.requestFocus();tile.label.setText("↔  "+app.label);tile.rim.setAlpha(255);tile.face.setElevation(px(22));
+        }
+        setHero("@move",app.label,"Move with the arrows. Press OK to save, or Back to cancel.");
+        heroDescription.setVisibility(View.INVISIBLE);
+    }
+    private void finishMoving(boolean save){endMoving(save,true);}
+    private void endMoving(boolean save,boolean rebuild){
+        if(movingApp==null)return;
+        String pkg=movingApp,back=movingReturnPage;movingApp=null;movingReturnPage=null;
+        if(save)prefs.edit().putString("order",String.join(",",movingOrder)).apply();
+        movingOrder=null;if(moveHint!=null){root.removeView(moveHint);moveHint=null;}
+        if(heroDescription!=null)heroDescription.setVisibility(View.VISIBLE);
+        for(Tile tile:tiles)if(tile.app.pkg.equals(pkg)){tile.label.setText(tile.app.label);tile.face.setElevation(px(tile.hasFocus()?14:2));}
+        if(rebuild&&(!save||!page.equals(back))){selectedPackage=pkg;showPage(back,true);}
+        else{selectedPackage=pkg;if(page.equals("apps"))setHero("@apps","All your apps","Everything installed on this TV.");else for(Tile tile:tiles)if(tile.app.pkg.equals(pkg))selectApp(tile.app);}
+    }
+    private void moveApp(int direction){
+        int from=-1;for(int i=0;i<tiles.size();i++)if(tiles.get(i).app.pkg.equals(movingApp)){from=i;break;}
+        if(from<0)return;
+        int to=from;
+        if(direction==KeyEvent.KEYCODE_DPAD_LEFT&&from%6>0)to=from-1;
+        if(direction==KeyEvent.KEYCODE_DPAD_RIGHT&&from%6<5&&from+1<tiles.size())to=from+1;
+        if(direction==KeyEvent.KEYCODE_DPAD_UP&&from>=6)to=from-6;
+        if(direction==KeyEvent.KEYCODE_DPAD_DOWN&&from+6<tiles.size())to=from+6;
+        if(to==from)return;
+        String target=tiles.get(to).app.pkg;
+        movingOrder.remove(movingApp);movingOrder.add(movingOrder.indexOf(target)+(to>from?1:0),movingApp);
+        Tile lifted=tiles.remove(from);tiles.add(to,lifted);
+        // Reuse the cards rather than rebuilding Home and its widgets on every key press.
+        for(Tile tile:tiles)((ViewGroup)tile.getParent()).removeView(tile);
+        rows.removeAllViews();
+        LinearLayout row=null;
+        for(int i=0;i<tiles.size();i++){
+            if(i%6==0){row=new LinearLayout(this);row.setClipChildren(false);row.setClipToPadding(false);rows.addView(row,new LinearLayout.LayoutParams(-1,px(112)));}
+            Tile tile=tiles.get(i);tile.index=i;
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(px(132),px(108));if(i%6>0)lp.leftMargin=px(14.4f);row.addView(tile,lp);
+        }
+        lifted.requestFocus();lifted.label.setText("↔  "+lifted.app.label);lifted.face.setElevation(px(22));lifted.rim.setAlpha(255);
+        navigationSound(to);
+    }
+    @Override public boolean dispatchKeyEvent(KeyEvent event){
+        int key=event.getKeyCode();
+        if(key==KeyEvent.KEYCODE_TV_INPUT&&movingApp!=null)finishMoving(false);
+        if(movingApp!=null){
+            if(key==KeyEvent.KEYCODE_DPAD_CENTER||key==KeyEvent.KEYCODE_ENTER||key==KeyEvent.KEYCODE_BACK){
+                if(event.getAction()==KeyEvent.ACTION_UP)finishMoving(key!=KeyEvent.KEYCODE_BACK);return true;
+            }
+            if(key==KeyEvent.KEYCODE_DPAD_LEFT||key==KeyEvent.KEYCODE_DPAD_RIGHT||key==KeyEvent.KEYCODE_DPAD_UP||key==KeyEvent.KEYCODE_DPAD_DOWN){
+                if(event.getAction()==KeyEvent.ACTION_DOWN&&(event.getRepeatCount()==0||event.getRepeatCount()%2==0))moveApp(key);return true;
+            }
+        }
+        if(key==KeyEvent.KEYCODE_TV_INPUT){
+            if(event.getAction()==KeyEvent.ACTION_DOWN&&event.getRepeatCount()==0){
+                ArrayList<InputsWidget.Input> inputs=InputsWidget.list(this);
+                if(!inputs.isEmpty()){
+                    String[] labels=new String[inputs.size()];for(int i=0;i<inputs.size();i++)labels[i]=inputs.get(i).name;
+                    menu("Inputs",labels,-1,index->{try{startActivity(InputsWidget.intent(inputs.get(index)));}catch(ActivityNotFoundException|SecurityException e){notice("Input unavailable","This TV could not open that input.");}});
+                }
+            }
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     /* ---------- Settings ---------- */
@@ -816,6 +897,8 @@ public final class MainActivity extends Activity {
         widgetsRow=controls.size();
         controls.add(option(list,"Home widgets",this::widgetSummary,null,this::widgetEditor,
             ()->preview(0,"Home widgets","Choose what Home shows above your apps — "+(house?"Smart Home, ":"")+"Up Next, Weather, "+(InputsWidget.count>0?"Inputs, ":"")+"Now Playing and Control — and their order. Left and Right turn the pages.")));
+        controls.add(option(list,"Up Next",()->"Manage",null,this::upNextSettings,
+            ()->preview(0,"Up Next","Continue watching shared by your apps with Android TV, plus recently opened apps. Reset only clears what Luma shows.")));
         locationRow=controls.size();
         controls.add(option(list,"Weather location",()->{Places.Place p=Places.pinned(prefs);return p==null?"Automatic":p.name;},null,this::locationPicker,
             ()->preview(0,"Weather location",locationAbout())));
@@ -831,6 +914,12 @@ public final class MainActivity extends Activity {
         content.setTag(controls);
         preview(THUMBS[wp],WALLPAPERS[wp],"Eight wallpapers, from silver silk to the Milky Way. Silver is light by day and dark after sunset.");
         if (focus) root.post(()->controls.get(0).requestFocus());
+    }
+    private void upNextSettings(){
+        menu("Up Next",new String[]{"Where does this come from?","Reset Up Next"},-1,choice->{
+            if(choice==0){notice("About Up Next","Luma reads Continue watching from Android TV (added by apps like HBO Max and Atresplayer), followed by recent apps. Reset hides existing entries in Luma until those apps publish new activity. It does not clear your viewing history in those services.");return;}
+            menu("Reset Up Next?",new String[]{"Cancel","Reset what Luma shows"},0,confirm->{if(confirm==1){UpNextWidget.reset(prefs,System.currentTimeMillis());notice("Up Next reset","Existing entries are hidden in Luma. New playback activity and apps you open from now on will appear here.");}});
+        });
     }
     private void caption(LinearLayout list,String label,boolean first){
         TextView c=text(label,13,ink(0x99),"sans-serif-medium");c.setPadding(px(10),0,0,0);
@@ -1086,6 +1175,7 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,px(44));lp.bottomMargin=px(6);parent.addView(row,lp);return row;
     }
     @Override public void onBackPressed() {
+        if(movingApp!=null){finishMoving(false);return;}
         if (overlay!=null) { closeOverlay(true); return; }
         if (!page.equals("home")) showPage("home",true);
         else if (board!=null && board.index>0) {board.showPage(0);tabs.get(0).requestFocus();}
@@ -1100,7 +1190,7 @@ public final class MainActivity extends Activity {
         final Shine light;
         final GradientDrawable rim;
         final TextView label;
-        final int index;
+        int index;
         final TileMotion movement;
         Tile(App item,int number) {
             super(MainActivity.this);app=item;index=number;
@@ -1206,8 +1296,6 @@ public final class MainActivity extends Activity {
                 float cx=w/2,cy=h/2;
                 p.setColor(0xFFFF0033);bounds.set(cx-px(25),cy-px(17),cx+px(25),cy+px(17));c.drawRoundRect(bounds,px(10),px(10),p);
                 p.setColor(Color.WHITE);Path path=new Path();path.moveTo(cx-px(5),cy-px(9));path.lineTo(cx+px(10),cy);path.lineTo(cx-px(5),cy+px(9));path.close();c.drawPath(path,p);
-            } else if(pkg.equals("com.netflix.ninja")) {
-                p.setTypeface(Typeface.create("sans-serif-black",Typeface.BOLD));p.setTextSize(px(54));p.setColor(0xFFE50914);p.setTextAlign(Paint.Align.CENTER);c.drawText("N",w/2,h/2+px(19),p);
             } else if(pkg.equals("com.soundcloud.android")) {
                 drawIcon(c,app.icon,48);
             } else if(pkg.equals("com.ted.android.tv")) {
