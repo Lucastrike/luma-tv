@@ -25,6 +25,11 @@ Mi TV Video Player, Music Player, Galeria, and Fondos de pantalla Mi. Their pack
 states are recorded in `xiaomi-estado-antes-debloat.json`. Restoration uses the saved state, rather than
 assuming every app should have an explicit `enabled` override.
 
+The eight optional packages were subsequently restored to those exact saved default states on
+November 5 after a multi-app loading failure. The user confirmed that apps worked again. That rollback
+kept Luma as Home and its Input filter inactive; it did not execute the full original-state restoration
+below. The snapshots remain unchanged. See the [trial and rollback report](../../docs/xiaomi-optional-apps-2026-11-05.md).
+
 If access removal, package states, animations, or original Home cannot be verified, the script stops
 before uninstalling replacement launchers. It does not uninstall any Xiaomi system app or clear app data.
 The Luma Input filter was found to suppress held volume/channel repetition on this firmware. Disabling
