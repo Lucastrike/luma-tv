@@ -29,7 +29,7 @@ public class InputKeyService extends AccessibilityService {
         if(event.getAction()==KeyEvent.ACTION_UP)handling=false;
         return consumed;
     }
-    void openInputs(){startActivity(new Intent(this,MainActivity.class).setAction(SHOW_INPUTS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP));}
+    void openInputs(){startActivity(new Intent(this,InputsActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP));}
     @Override public void onAccessibilityEvent(AccessibilityEvent event){}
     @Override public void onInterrupt(){}
 }

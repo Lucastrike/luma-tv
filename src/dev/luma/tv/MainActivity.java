@@ -40,6 +40,8 @@ public final class MainActivity extends Activity {
     private LinearLayout rows;
     private String page = "home", selectedPackage = "com.google.android.youtube.tv";
     private boolean changingPage;
+    private boolean stopped;
+    private Bundle navigation;
     private String movingApp;
     private String movingReturnPage;
     private ArrayList<String> movingOrder;
@@ -93,6 +95,7 @@ public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         prefs = getSharedPreferences("luma", MODE_PRIVATE);
+        if(state!=null){navigation=state.getBundle("navigation");if(navigation!=null){page=navigation.getString("page","home");homePage=navigation.getInt("widgetPage",0);}}
         unit = getResources().getDisplayMetrics().widthPixels / 960f;
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
@@ -115,7 +118,8 @@ public final class MainActivity extends Activity {
         resetSceneTransition();
         handler.removeCallbacks(clockTick);
         handler.post(clockTick);
-        if(loaded && page.equals("home")){selectedPackage="com.google.android.youtube.tv";showGreeting();root.post(()->{holdGreeting=true;focusFirst();});}
+        stopped=false;
+        if(loaded)root.post(this::restoreNavigation);
         if (loaded) discover();
         syncHouse();
         // A sunrise or sunset that passed while an app was open switches a moment after Home returns, once that
@@ -126,12 +130,15 @@ public final class MainActivity extends Activity {
         if(board!=null){board.setActive(true);board.refresh();}
     }
     @Override protected void onPause() {
+        if(!sceneTransition)navigation=captureNavigation();
         if(movingApp!=null)finishMoving(false);
         super.onPause(); if(houseWidgets!=null)houseWidgets.setActive(false); if(board!=null)board.setActive(false); started = false; handler.removeCallbacks(clockTick); handler.removeCallbacks(daylightTick);
         if(!sceneTransition){content.animate().cancel();content.setAlpha(1);}
         for(Tile tile:tiles) tile.movement.snap();
         wallpaper.pauseAmbient();wallpaper.rest();
     }
+    @Override protected void onStop(){stopped=true;super.onStop();}
+    @Override protected void onSaveInstanceState(Bundle state){Bundle current=captureNavigation();if(current!=null)state.putBundle("navigation",current);super.onSaveInstanceState(state);}
     @Override public void onWindowFocusChanged(boolean focused) { super.onWindowFocusChanged(focused);if(wallpaper!=null)wallpaper.syncAmbient(); }
     @Override protected void onDestroy() { try{unregisterReceiver(packages);}catch(IllegalArgumentException ignored){} if(wallpaper!=null){wallpaper.pauseAmbient();wallpaper.surfaceThread.quitSafely();}super.onDestroy(); handler.removeCallbacksAndMessages(null); loader.shutdownNow(); if(sonic!=null)sonic.release(); }
     @Override protected void onNewIntent(Intent intent) {
@@ -141,7 +148,9 @@ public final class MainActivity extends Activity {
         if(look!=null&&look.matches("day|night|auto")){daylightOverride=look;if(started)syncDaylight();}
         String demo=intent.getStringExtra("luma.demo");if(demo!=null){Promo.on=demo.equals("promo");if(Promo.on)Promo.start(this);board=null;homePage=0;showPage("home",true);} // board=null: start on the first page
         String inputs=intent.getStringExtra("luma.inputs");if(inputs!=null){InputsWidget.demo=inputs.equals("demo");showPage(page,true);} // arrives while paused
-        if (intent.hasCategory(Intent.CATEGORY_HOME)){selectedPackage="com.google.android.youtube.tv";if(started)homePage=0;showPage("home", true);} // Home pressed on Home: back to the first page
+        // Returning from another app delivers HOME to the singleTask activity before onResume.
+        // Only a Home press while Luma is already visible resets navigation.
+        if(intent.hasCategory(Intent.CATEGORY_HOME)&&!stopped){navigation=null;selectedPackage="com.google.android.youtube.tv";homePage=0;showPage("home",true);}
     }
     @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){
         super.onRequestPermissionsResult(code,permissions,results);
@@ -262,7 +271,7 @@ public final class MainActivity extends Activity {
         root.addView(clock, pos(130, 36, 782, 28));
         paintChrome();
         setContentView(root);
-        showPage("home", false);
+        showPage(page, false);
     }
 
     private void discover() {
@@ -297,7 +306,7 @@ public final class MainActivity extends Activity {
                 loading=false;
                 boolean changed = !loaded || found.size()!=apps.size();
                 if (!changed) for (int i=0;i<found.size();i++) if (!found.get(i).pkg.equals(apps.get(i).pkg)) { changed=true; break; }
-                if (changed) { apps.clear(); apps.addAll(found); HashMap<String,App> index=new HashMap<>(); for(App a:found) index.put(a.pkg,a); appIndex=index; loaded=true; showPage(page, true); }
+                if (changed) { Bundle position=loaded?captureNavigation():navigation;apps.clear(); apps.addAll(found); HashMap<String,App> index=new HashMap<>(); for(App a:found) index.put(a.pkg,a); appIndex=index; loaded=true;navigation=position;showPage(page,true); }
             });
         });
     }
@@ -322,6 +331,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showPage(String next, boolean focus) {
+        if(!page.equals(next))navigation=null;
         if(movingApp!=null)endMoving(false,false);
         boolean keepTab=focusedTab()>=0;
         changingPage=true;
@@ -406,7 +416,40 @@ public final class MainActivity extends Activity {
         // Removing the old page can give Home automatic fallback focus. It must not navigate back.
         if(!focus&&keepTab)tabs.get(pageTab()).requestFocus();
         changingPage=false;
-        if(focus){final String expected=page;root.post(()->{if(!page.equals(expected))return;holdGreeting=page.equals("home");if(page.equals("settings"))controlsFocus(0);else focusFirst();});}
+        if(focus){final String expected=page;root.post(()->{if(!page.equals(expected)||restoreNavigation())return;holdGreeting=page.equals("home");if(page.equals("settings"))controlsFocus(0);else focusFirst();});}
+    }
+
+    /** A semantic key survives app reordering; a hierarchy path covers the other remote controls. */
+    private String navigationKey(View view){
+        if(view instanceof Tile)return "app:"+((Tile)view).app.pkg;
+        if(view instanceof Widget.Tile)return "widget:"+((Widget.Tile)view).key;
+        return view.getTag() instanceof String?(String)view.getTag():"";
+    }
+    private Bundle captureNavigation(){
+        View focused=overlay!=null?overlayReturn:getCurrentFocus();
+        if(focused==null||focused==sceneVeil||!WidgetBoard.isDescendant(root,focused))return navigation;
+        Bundle state=new Bundle();state.putString("page",page);state.putInt("widgetPage",board!=null?board.index:homePage);
+        state.putString("key",navigationKey(focused));
+        ArrayList<Integer> path=new ArrayList<>();
+        for(View child=focused;child!=root;){ViewGroup parent=(ViewGroup)child.getParent();path.add(parent.indexOfChild(child));child=parent;}
+        int[] indices=new int[path.size()];for(int i=0;i<indices.length;i++)indices[i]=path.get(indices.length-1-i);state.putIntArray("path",indices);
+        state.putInt("scroll",page.equals("settings")&&settingsScroll!=null?settingsScroll.getScrollY():scroll!=null?scroll.getScrollY():0);
+        return state;
+    }
+    private View findNavigationKey(View view,String key){
+        if(key.equals(navigationKey(view)))return view;
+        if(view instanceof ViewGroup)for(int i=0;i<((ViewGroup)view).getChildCount();i++){View found=findNavigationKey(((ViewGroup)view).getChildAt(i),key);if(found!=null)return found;}
+        return null;
+    }
+    private boolean restoreNavigation(){
+        Bundle state=navigation;if(state==null||!page.equals(state.getString("page"))||overlay!=null)return false;
+        if(board!=null)board.showPage(state.getInt("widgetPage",0));
+        String key=state.getString("key","");View target=key.isEmpty()?root:findNavigationKey(root,key);
+        if(key.isEmpty())for(int index:state.getIntArray("path")){if(!(target instanceof ViewGroup)||index>=((ViewGroup)target).getChildCount()){target=null;break;}target=((ViewGroup)target).getChildAt(index);}
+        if(target==null||!target.isShown()||!target.requestFocus())return false;
+        ScrollView scroller=page.equals("settings")?settingsScroll:scroll;
+        if(scroller!=null)scroller.post(()->scroller.scrollTo(0,state.getInt("scroll")));
+        return true;
     }
 
     private void animatePage(String previous,boolean transition) {
@@ -767,6 +810,7 @@ public final class MainActivity extends Activity {
         String pkg=sceneApp(id);if(pkg.isEmpty()||sceneTransition)return false;App target=null;for(App app:apps)if(app.pkg.equals(pkg))target=app;
         if(target==null){Toast.makeText(this,"The scene app is not installed.",Toast.LENGTH_SHORT).show();return false;}
         final App selected=target;if(!motion()||houseWidgets==null){launch(selected);return false;}
+        navigation=captureNavigation();
         sceneTransition=true;content.setTranslationZ(px(40));
         sceneVeil=new View(this);sceneVeil.setBackgroundColor(Color.BLACK);sceneVeil.setAlpha(0);sceneVeil.setFocusable(true);sceneVeil.setFocusableInTouchMode(true);sceneVeil.setOnKeyListener((v,k,e)->true);sceneVeil.setTranslationZ(px(200));root.addView(sceneVeil,new FrameLayout.LayoutParams(-1,-1));sceneVeil.requestFocus();
         final int flight=1500;

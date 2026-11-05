@@ -13,14 +13,51 @@ import java.util.*;
 public final class LumaRegression extends Instrumentation {
     MainActivity activity;
     int failures;
+    String checkFilter="";
     interface Check { void run() throws Exception; }
-    @Override public void onCreate(Bundle args) { super.onCreate(args);start(); }
+    @Override public void onCreate(Bundle args) { super.onCreate(args);if(args!=null)checkFilter=args.getString("check","");start(); }
     @Override public void onStart() {
         try {
             if(!getTargetContext().getPackageName().endsWith(".qa"))throw new IllegalStateException("Use a .qa package for regression tests");
             activity=(MainActivity)startActivitySync(new Intent().setClassName(getTargetContext(),MainActivity.class.getName()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             ui(()->activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON));
             for(int i=0;i<100&&!((Boolean)field(activity,"loaded"));i++){SystemClock.sleep(100);waitForIdleSync();}
+            test("Input shortcut opens over content without launching Home",()->{
+                Intent[] opened={null};
+                InputKeyService shortcut=new InputKeyService(){@Override public void startActivity(Intent intent){opened[0]=intent;}};
+                Method attach=ContextWrapper.class.getDeclaredMethod("attachBaseContext",Context.class);attach.setAccessible(true);attach.invoke(shortcut,activity);
+                ui(()->{
+                    require(shortcut.onKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_TV_INPUT)),"Input down was not handled");
+                    require(shortcut.onKeyEvent(new KeyEvent(KeyEvent.ACTION_UP,KeyEvent.KEYCODE_TV_INPUT)),"Input up was not handled");
+                });
+                require(opened[0]!=null,"Input did not open a selector");
+                require(new ComponentName(activity.getPackageName(),"dev.luma.tv.InputsActivity").equals(opened[0].getComponent()),"Input opened Home: "+opened[0].getComponent());
+                require((opened[0].getFlags()&Intent.FLAG_ACTIVITY_NEW_TASK)!=0,"Service launch requires its own task");
+            });
+            test("Input menu: background stays visible and arrows work before and after Back",()->inputMenu("back"));
+            test("Input menu: repeated Input closes to the same app",()->inputMenu("toggle"));
+            test("Input menu: OK opens the selected input and leaves no menu behind",()->inputMenu("select"));
+            test("Input menu: Home leaves no menu behind",()->inputMenu("home"));
+            test("Return focus: Back keeps the selected Home app",()->returnFocus("home",false,false));
+            test("Return focus: Home keeps the selected Home app",()->returnFocus("home",true,false));
+            test("Return focus: Home keeps the selected Apps row",()->returnFocus("apps",true,false));
+            test("Return focus: Home keeps the selected Settings component",()->returnFocus("settings",true,false));
+            test("Return focus: Home keeps the selected input widget and page",()->returnFocus("home",true,true));
+            test("Return focus: Back keeps the selected Apps row",()->returnFocus("apps",false,false));
+            test("Return focus: Back keeps the selected Settings component",()->returnFocus("settings",false,false));
+            test("Return focus: Back keeps the selected input widget and page",()->returnFocus("home",false,true));
+            test("Recreated launcher restores the selected app and Apps page",()->recreatedFocus(false));
+            test("Recreated launcher restores the selected input and widget page",()->recreatedFocus(true));
+            test("Home while already in Luma still opens Home",()->{
+                ui(()->invoke(activity,"showPage",new Class[]{String.class,boolean.class},"apps",true));waitForIdleSync();
+                ui(()->activity.startActivity(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).setClass(getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)));
+                waitForIdleSync();require("home".equals(field(activity,"page")),"Home inside Luma did not open Home");
+            });
+            test("Preferred inputs follow TV, Series X, HDMI 1, AV, soundbar",()->{
+                ArrayList<String> names=new ArrayList<>();
+                for(InputsWidget.Input input:InputsWidget.list(activity))names.add(input.name);
+                require(names.equals(Arrays.asList("TV","SERIES X","HDMI 1","AV","Barra de sonido")),"Input order: "+names);
+            });
             test("Focus animation frame timings",()->profileFocus());
             test("Tabs switch content with arrows and Down enters the selected page",()->{
                 ui(()->{invoke(activity,"showPage",new Class[]{String.class,boolean.class},"home",false);((View)((List<?>)read(activity,"tabs")).get(0)).requestFocus();});
@@ -60,6 +97,79 @@ public final class LumaRegression extends Instrumentation {
                     require(widget[0].title.getText().toString().equals("Regression video"),"Video disappeared when Home rebuilt");
                 }finally{session.release();}
             });
+            test("Now Playing retains the last watched minute when a session stops at zero",()->{
+                android.media.session.MediaSession session=new android.media.session.MediaSession(activity,"Luma stopped progress regression");
+                try{
+                    session.setMetadata(new android.media.MediaMetadata.Builder().putString(android.media.MediaMetadata.METADATA_KEY_TITLE,"Stopped video").putLong(android.media.MediaMetadata.METADATA_KEY_DURATION,120000).build());
+                    session.setPlaybackState(new android.media.session.PlaybackState.Builder().setState(android.media.session.PlaybackState.STATE_PAUSED,45000,0).build());
+                    ui(()->PlaybackMemory.observe(activity,Collections.singletonList(session.getController())));
+                    session.setPlaybackState(new android.media.session.PlaybackState.Builder().setState(android.media.session.PlaybackState.STATE_STOPPED,0,0).build());
+                    ui(()->PlaybackMemory.observe(activity,Collections.singletonList(session.getController())));
+                    ui(()->PlaybackMemory.observe(activity,Collections.emptyList()));
+                    resetPlaybackMemory();
+                    ui(()->{
+                        NowPlayingWidget widget=new NowPlayingWidget(activity,(WidgetBoard.Host)read(activity,"boardHost"));
+                        require(widget.elapsed.getText().toString().equals("0:45"),"Last watched minute was replaced by "+widget.elapsed.getText());
+                    });
+                }finally{session.release();}
+            });
+            test("Now Playing retains a bitmap preview after the launcher process restarts",()->{
+                android.media.session.MediaSession session=new android.media.session.MediaSession(activity,"Luma persisted preview regression");
+                android.graphics.Bitmap preview=android.graphics.Bitmap.createBitmap(1024,512,android.graphics.Bitmap.Config.ARGB_8888);preview.eraseColor(android.graphics.Color.MAGENTA);
+                try{
+                    session.setMetadata(new android.media.MediaMetadata.Builder().putString(android.media.MediaMetadata.METADATA_KEY_TITLE,"Bitmap video").putBitmap(android.media.MediaMetadata.METADATA_KEY_ART,preview).putLong(android.media.MediaMetadata.METADATA_KEY_DURATION,120000).build());
+                    session.setPlaybackState(new android.media.session.PlaybackState.Builder().setState(android.media.session.PlaybackState.STATE_PAUSED,45000,0).build());
+                    ui(()->PlaybackMemory.observe(activity,Collections.singletonList(session.getController())));
+                    ui(()->PlaybackMemory.observe(activity,Collections.emptyList()));
+                    resetPlaybackMemory();
+                    require(PlaybackMemory.get(activity).bitmap!=null,"Preview disappeared after reloading the saved video");
+                    require(PlaybackMemory.get(activity).bitmap.getWidth()<=512,"Persisted preview was not bounded");
+                    ui(()->{
+                        NowPlayingWidget widget=new NowPlayingWidget(activity,(WidgetBoard.Host)read(activity,"boardHost"));
+                        require(widget.artImage.getDrawable()!=null,"Preview disappeared after reloading the saved video");
+                        require(widget.elapsed.getText().toString().equals("0:45"),"Saved preview lost its playback position");
+                    });
+                }finally{session.release();}
+            });
+            test("Now Playing keeps preview and minute during partial live metadata updates",()->{
+                android.media.session.MediaSession session=new android.media.session.MediaSession(activity,"Luma partial metadata regression");
+                android.graphics.Bitmap preview=android.graphics.Bitmap.createBitmap(24,24,android.graphics.Bitmap.Config.ARGB_8888);
+                try{
+                    session.setMetadata(new android.media.MediaMetadata.Builder().putString(android.media.MediaMetadata.METADATA_KEY_TITLE,"Partial video").putBitmap(android.media.MediaMetadata.METADATA_KEY_ART,preview).putLong(android.media.MediaMetadata.METADATA_KEY_DURATION,120000).build());
+                    session.setPlaybackState(new android.media.session.PlaybackState.Builder().setState(android.media.session.PlaybackState.STATE_PAUSED,45000,0).build());
+                    ui(()->PlaybackMemory.observe(activity,Collections.singletonList(session.getController())));
+                    session.setMetadata(new android.media.MediaMetadata.Builder().putString(android.media.MediaMetadata.METADATA_KEY_TITLE,"Partial video").build());
+                    session.setPlaybackState(new android.media.session.PlaybackState.Builder().setState(android.media.session.PlaybackState.STATE_PAUSED,android.media.session.PlaybackState.PLAYBACK_POSITION_UNKNOWN,0).build());
+                    ui(()->{
+                        NowPlayingWidget widget=new NowPlayingWidget(activity,(WidgetBoard.Host)read(activity,"boardHost"));
+                        invoke(widget,"use",new Class[]{android.media.session.MediaController.class},session.getController());
+                        require(widget.artImage.getDrawable()!=null,"Partial live metadata erased the preview");
+                        require(widget.elapsed.getText().toString().equals("0:45"),"Partial live metadata erased the watched minute");
+                        require(widget.track.getVisibility()==View.VISIBLE,"Partial live metadata erased the known duration");
+                        invoke(widget,"use",new Class[]{android.media.session.MediaController.class},(Object)null);
+                    });
+                }finally{session.release();}
+            });
+            test("Now Playing accepts a real seek to zero and does not reuse another video's preview",()->{
+                android.media.session.MediaSession session=new android.media.session.MediaSession(activity,"Luma seek regression");
+                try{
+                    session.setMetadata(new android.media.MediaMetadata.Builder().putString(android.media.MediaMetadata.METADATA_KEY_MEDIA_ID,"video-one").putString(android.media.MediaMetadata.METADATA_KEY_TITLE,"Same title").putBitmap(android.media.MediaMetadata.METADATA_KEY_ART,android.graphics.Bitmap.createBitmap(24,24,android.graphics.Bitmap.Config.ARGB_8888)).putLong(android.media.MediaMetadata.METADATA_KEY_DURATION,120000).build());
+                    session.setPlaybackState(new android.media.session.PlaybackState.Builder().setState(android.media.session.PlaybackState.STATE_PAUSED,45000,0).build());
+                    ui(()->PlaybackMemory.observe(activity,Collections.singletonList(session.getController())));
+                    session.setPlaybackState(new android.media.session.PlaybackState.Builder().setState(android.media.session.PlaybackState.STATE_PAUSED,0,0).build());
+                    ui(()->PlaybackMemory.observe(activity,Collections.singletonList(session.getController())));
+                    require(PlaybackMemory.get(activity).position==0,"A deliberate seek to the start was ignored");
+                    session.setMetadata(new android.media.MediaMetadata.Builder().putString(android.media.MediaMetadata.METADATA_KEY_MEDIA_ID,"video-two").putString(android.media.MediaMetadata.METADATA_KEY_TITLE,"Same title").build());
+                    session.setPlaybackState(new android.media.session.PlaybackState.Builder().setState(android.media.session.PlaybackState.STATE_NONE,android.media.session.PlaybackState.PLAYBACK_POSITION_UNKNOWN,0).build());
+                    ui(()->PlaybackMemory.observe(activity,Collections.singletonList(session.getController())));
+                    resetPlaybackMemory();
+                    ui(()->{
+                        NowPlayingWidget widget=new NowPlayingWidget(activity,(WidgetBoard.Host)read(activity,"boardHost"));
+                        require(widget.artImage.getDrawable()==null,"A different video inherited the previous preview");
+                        require(widget.elapsed.getText().length()==0,"An unknown position was presented as 0:00");
+                    });
+                }finally{session.release();}
+            });
             test("The antenna tuner is named TV",()->{
                 boolean found=false;for(InputsWidget.Input input:InputsWidget.list(activity))if(input.tuner){found=true;require(input.name.equals("TV"),"Tuner is called "+input.name);}
                 require(found,"No tuner available for this regression");
@@ -73,8 +183,9 @@ public final class LumaRegression extends Instrumentation {
                     session.setPlaybackState(new android.media.session.PlaybackState.Builder().setState(android.media.session.PlaybackState.STATE_PAUSED,45000,0).build());
                     ui(()->invoke(listener,"watch",new Class[]{List.class},Collections.singletonList(session.getController())));
                     session.setMetadata(new android.media.MediaMetadata.Builder().putString(android.media.MediaMetadata.METADATA_KEY_TITLE,"Offscreen video B").putLong(android.media.MediaMetadata.METADATA_KEY_DURATION,120000).build());
-                    for(int i=0;i<100&&!PlaybackMemory.get(activity).title.equals("Offscreen video B");i++)SystemClock.sleep(20);
-                    require(PlaybackMemory.get(activity).title.equals("Offscreen video B"),"Metadata changed offscreen but was not remembered");
+                    boolean[] received={false};
+                    for(int i=0;i<100;i++){ui(()->received[0]=PlaybackMemory.get(activity).title.equals("Offscreen video B"));if(received[0])break;SystemClock.sleep(20);}
+                    ui(()->require(PlaybackMemory.get(activity).title.equals("Offscreen video B"),"Metadata changed offscreen but was not remembered: saved="+PlaybackMemory.get(activity).title+", session="+session.getController().getMetadata().getString(android.media.MediaMetadata.METADATA_KEY_TITLE)));
                     ui(()->invoke(listener,"watch",new Class[]{List.class},Collections.emptyList()));
                     String[] launched={null};WidgetBoard.Host delegate=(WidgetBoard.Host)field(activity,"boardHost");
                     WidgetBoard.Host host=(WidgetBoard.Host)Proxy.newProxyInstance(WidgetBoard.Host.class.getClassLoader(),new Class[]{WidgetBoard.Host.class},(proxy,method,args)->{
@@ -260,9 +371,114 @@ public final class LumaRegression extends Instrumentation {
         } catch(Throwable e){failures++;log("ERROR "+e);}
         Bundle result=new Bundle();result.putString("stream","\nLuma regression failures: "+failures+"\n");finish(failures==0?Activity.RESULT_OK:Activity.RESULT_CANCELED,result);
     }
-    void test(String name,Check check){try{check.run();log("PASS "+name);}catch(Throwable e){failures++;log("FAIL "+name+": "+e);}}
+    void test(String name,Check check){if(!checkFilter.isEmpty()&&!name.contains(checkFilter))return;try{check.run();log("PASS "+name);}catch(Throwable e){failures++;log("FAIL "+name+": "+e);}}
+    void resetPlaybackMemory()throws Exception{
+        ((java.util.concurrent.ExecutorService)fieldStatic(PlaybackMemory.class,"ART_IO")).submit(()->{}).get();
+        Field latest=PlaybackMemory.class.getDeclaredField("latest");latest.setAccessible(true);latest.set(null,null);
+        Field loaded=PlaybackMemory.class.getDeclaredField("loaded");loaded.setAccessible(true);loaded.setBoolean(null,false);
+    }
     void log(String message){Bundle b=new Bundle();b.putString("stream",message+"\n");sendStatus(0,b);}
     void require(boolean value,String message){if(!value)throw new AssertionError(message);}
+    void inputMenu(String exit)throws Exception{
+        ReturnFixture background=(ReturnFixture)startActivitySync(new Intent(getTargetContext(),ReturnFixture.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        Activity menu=null;
+        Intent[] selected={null};
+        ActivityMonitor monitor=new ActivityMonitor(){@Override public ActivityResult onStartActivity(Intent intent){
+            if(Intent.ACTION_VIEW.equals(intent.getAction())){selected[0]=intent;return new ActivityResult(Activity.RESULT_CANCELED,null);}return null;
+        }};
+        try{
+            waitForIdleSync();SystemClock.sleep(400);
+            menu=startActivitySync(new Intent().setClassName(getTargetContext(),"dev.luma.tv.InputsActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            final Activity shown=menu;waitForIdleSync();SystemClock.sleep(400);waitForIdleSync();
+            ui(()->{
+                require(!background.stopped&&background.getWindow().getDecorView().isShown(),"Opening Inputs hid the original content");
+                require(!((Boolean)read(activity,"started")),"Opening Inputs resumed Home");
+                require(shown.getTaskId()!=activity.getTaskId(),"Inputs reused the launcher task");
+                require(shown.getCurrentFocus() instanceof TextView&&"TV".contentEquals(((TextView)shown.getCurrentFocus()).getText()),"Inputs did not focus TV");
+            });
+            String[] labels={"TV","SERIES X","HDMI 1","AV","Barra de sonido"};
+            for(int i=1;i<labels.length;i++){
+                sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN);waitForIdleSync();final String expected=labels[i];
+                ui(()->require(shown.getCurrentFocus() instanceof TextView&&expected.contentEquals(((TextView)shown.getCurrentFocus()).getText()),"Down did not focus "+expected));
+            }
+            sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_UP);waitForIdleSync();
+            ui(()->require("AV".contentEquals(((TextView)shown.getCurrentFocus()).getText()),"Up did not focus AV"));
+            if(exit.equals("toggle"))ui(()->shown.startActivity(new Intent().setClassName(getTargetContext(),"dev.luma.tv.InputsActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP)));
+            else if(exit.equals("select")){
+                addMonitor(monitor);sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_UP);waitForIdleSync();sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER);
+                require(selected[0]!=null,"OK did not start the selected input");
+                InputsWidget.Input hdmi=null;for(InputsWidget.Input input:InputsWidget.list(activity))if(input.name.equals("HDMI 1"))hdmi=input;
+                require(hdmi!=null&&InputsWidget.intent(hdmi).getData().equals(selected[0].getData()),"OK started another input: "+selected[0]);
+            }
+            else if(exit.equals("home"))ui(()->shown.startActivity(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)));
+            else sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
+            waitForIdleSync();SystemClock.sleep(400);waitForIdleSync();
+            for(int i=0;i<20&&!shown.isFinishing()&&!shown.isDestroyed();i++){SystemClock.sleep(100);waitForIdleSync();}
+            ui(()->{
+                require(shown.isFinishing()||shown.isDestroyed(),"Inputs did not close");
+                if(!exit.equals("home")){require(background.resumed&&!background.isFinishing(),"Closing Inputs did not restore the original app");background.first.requestFocus();}
+            });
+            if(!exit.equals("home")){
+                sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN);waitForIdleSync();
+                ui(()->require(background.second.hasFocus(),"Arrow keys did not reach the original app after closing Inputs"));
+            }
+        }finally{
+            if(exit.equals("select"))removeMonitor(monitor);
+            if(menu!=null){final Activity shown=menu;ui(shown::finish);}
+            ui(background::finish);waitForIdleSync();
+            ui(()->activity.startActivity(new Intent(getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)));waitForIdleSync();
+        }
+    }
+    void returnFocus(String page,boolean home,boolean widget)throws Exception{
+        ui(()->invoke(activity,"showPage",new Class[]{String.class,boolean.class},page,true));waitForIdleSync();
+        View[] target={null};int[] widgetPage={-1};
+        ui(()->{
+            if(widget){
+                WidgetBoard board=(WidgetBoard)read(activity,"board");
+                for(int p=0;p<board.widgets.size();p++)for(Widget w:board.widgets.get(p))if(w instanceof InputsWidget){
+                    board.showPage(p);widgetPage[0]=p;target[0]=((InputsWidget)w).tiles.get(1);
+                }
+            }else if(page.equals("settings"))target[0]=(View)((List<?>)((View)read(activity,"content")).getTag()).get(2);
+            else target[0]=(View)((List<?>)read(activity,"tiles")).get(page.equals("apps")?7:2);
+            require(target[0]!=null&&target[0].requestFocus(),"Could not focus the return target");
+        });
+        waitForIdleSync();
+        ReturnFixture other=(ReturnFixture)startActivitySync(new Intent(getTargetContext(),ReturnFixture.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        try{
+            waitForIdleSync();SystemClock.sleep(400);waitForIdleSync();
+            require(!((Boolean)field(activity,"started")),"Fixture did not pause Luma");
+            if(home)ui(()->other.startActivity(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).setClass(getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)));
+            else ui(other::finish);
+            waitForIdleSync();SystemClock.sleep(300);waitForIdleSync();
+            ui(()->{
+                require(page.equals(read(activity,"page")),"Returned to "+read(activity,"page")+" instead of "+page);
+                require(target[0].hasFocus(),"Lost the selected component when returning with "+(home?"Home":"Back"));
+                if(widget)require(((WidgetBoard)read(activity,"board")).index==widgetPage[0],"Lost the widget page");
+            });
+        }finally{ui(other::finish);waitForIdleSync();}
+    }
+    void recreatedFocus(boolean widget)throws Exception{
+        String page=widget?"home":"apps";
+        ui(()->invoke(activity,"showPage",new Class[]{String.class,boolean.class},page,true));waitForIdleSync();
+        String[] key={null};int[] shown={-1};
+        ui(()->{
+            if(widget){
+                WidgetBoard board=(WidgetBoard)read(activity,"board");
+                for(int p=0;p<board.widgets.size();p++)for(Widget w:board.widgets.get(p))if(w instanceof InputsWidget){board.showPage(p);shown[0]=p;Widget.Tile tile=((InputsWidget)w).tiles.get(1);tile.requestFocus();key[0]=tile.key;}
+            }else{View tile=(View)((List<?>)read(activity,"tiles")).get(7);tile.requestFocus();key[0]=((MainActivity.App)read(tile,"app")).pkg;}
+        });waitForIdleSync();
+        ActivityMonitor monitor=addMonitor(MainActivity.class.getName(),null,false);
+        try{
+            ui(activity::recreate);Activity replacement=waitForMonitorWithTimeout(monitor,5000);require(replacement!=null,"Recreation did not create an activity");activity=(MainActivity)replacement;
+            for(int i=0;i<100&&!((Boolean)field(activity,"loaded"));i++){SystemClock.sleep(50);waitForIdleSync();}
+            waitForIdleSync();SystemClock.sleep(300);waitForIdleSync();
+            ui(()->{
+                require(page.equals(read(activity,"page")),"Recreation lost the page");View focus=activity.getCurrentFocus();require(focus!=null,"Recreation lost focus");
+                if(widget){require(focus instanceof Widget.Tile&&key[0].equals(((Widget.Tile)focus).key),"Recreation lost the input");require(((WidgetBoard)read(activity,"board")).index==shown[0],"Recreation lost the widget page");}
+                else require(key[0].equals(((MainActivity.App)read(focus,"app")).pkg),"Recreation lost the selected app");
+            });
+        }finally{removeMonitor(monitor);}
+    }
     void profileFocus()throws Exception{
         ui(()->invoke(activity,"showPage",new Class[]{String.class,boolean.class},"apps",true));SystemClock.sleep(700);
         require(field(activity,"page").equals("apps")&&((List<?>)field(activity,"tiles")).size()>6,"Animation benchmark must run on the full Apps grid");
@@ -294,6 +510,7 @@ public final class LumaRegression extends Instrumentation {
     static View find(View v,String text){if(v instanceof TextView&&((TextView)v).getText().toString().equals(text))return v;if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++){View match=find(((ViewGroup)v).getChildAt(i),text);if(match!=null)return match;}return null;}
     static View findShown(View v,String text){if(!v.isShown())return null;if(v instanceof TextView&&((TextView)v).getText().toString().equals(text))return v;if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++){View match=findShown(((ViewGroup)v).getChildAt(i),text);if(match!=null)return match;}return null;}
     static Object field(Object target,String name)throws Exception{Field f=target.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(target);}
+    static Object fieldStatic(Class<?> target,String name)throws Exception{Field f=target.getDeclaredField(name);f.setAccessible(true);return f.get(null);}
     static Object invoke(Object target,String name,Class<?>[] types,Object... args){try{Method m=target.getClass().getDeclaredMethod(name,types);m.setAccessible(true);return m.invoke(target,args);}catch(Exception e){throw new RuntimeException(e);}}
     static Object invokeStatic(Class<?> target,String name,Class<?>[] types,Object... args)throws Exception{Method m=target.getDeclaredMethod(name,types);m.setAccessible(true);return m.invoke(null,args);}
 }

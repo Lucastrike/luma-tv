@@ -11,4 +11,11 @@
         <!-- Luma draws its own focus; the platform's grey highlight showed under cards on some devices. -->
         <item name="android:defaultFocusHighlightEnabled">false</item>
     </style>
+    <style name="InputsTheme" parent="AppTheme">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>

@@ -24,7 +24,7 @@ final class InputsWidget extends Widget {
      *  vendor. Streaming apps' own inputs (IPTV and the like) are left out. */
     static ArrayList<Input> list(Context context){
         ArrayList<Input> out=new ArrayList<>();
-        if(Promo.on){promo(out);count=out.size();return out;}
+        if(Promo.on){promo(out);sort(out);count=out.size();return out;}
         TvInputManager manager=(TvInputManager)context.getSystemService(Context.TV_INPUT_SERVICE);
         List<TvInputInfo> all;
         try{all=manager==null?Collections.emptyList():manager.getTvInputList();}catch(RuntimeException e){all=Collections.emptyList();}
@@ -51,8 +51,22 @@ final class InputsWidget extends Widget {
         HashSet<String> tunerLabels=new HashSet<>();
         Collections.sort(tuners,(a,b)->a.id.compareTo(b.id));
         for(Input t:tuners)if(vendors.contains(t.vendor)&&tunerLabels.add(t.vendor+":"+t.service+":"+t.name.toLowerCase(Locale.ROOT)))out.add(t);
+        sort(out);
         while(out.size()>6)out.remove(out.size()-1);
         count=out.size();return out;
+    }
+    /** Preferred devices first in both the widget and selector; retain the TV's own labels and IDs. */
+    static void sort(List<Input> inputs){
+        Collections.sort(inputs,(a,b)->{int rank=Integer.compare(preference(a),preference(b));return rank!=0?rank:natural(a.cec?a.port:a.name,b.cec?b.port:b.name);});
+    }
+    private static int preference(Input input){
+        String name=input.name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]","");
+        if(input.tuner)return 0;
+        if(name.equals("seriesx")||name.equals("xboxseriesx"))return 1;
+        if(name.equals("hdmi1"))return 2;
+        if(name.equals("av"))return 3;
+        if(name.equals("barradesonido")||"speaker".equals(input.glyph))return 5;
+        return 4;
     }
     /** {vendor ID, CEC device type} of a CEC device input, or -1s. HdmiDeviceInfo is a system API, read by reflection;
      *  the device's name is public (the input's label), so recognition still works when this is refused. */

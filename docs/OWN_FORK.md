@@ -59,3 +59,7 @@ quedó sin cambios. No se hizo ningún commit durante esta sustitución.
 La activación autorizada de Input y Now Playing se describe en [el informe de 2.5.2](fixes-2.5.2.md).
 El vídeo conservado, la navegación por foco y los cambios visuales posteriores se describen en
 [el informe de 2.5.3](fixes-2.5.3.md). La firma y el procedimiento de actualización son los mismos.
+
+Subsequent changes are documented in the [2.5.4 media report](fixes-2.5.4.md),
+[2.5.5 navigation report](fixes-2.5.5.md), and [2.5.6 Input report](fixes-2.5.6.md).
+They retain the same signing identity and in-place update procedure.

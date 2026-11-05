@@ -10,7 +10,6 @@ import android.media.session.PlaybackState;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.SystemClock;
 import android.provider.Settings;
 import android.view.*;
 import android.widget.FrameLayout;
@@ -125,7 +124,7 @@ final class NowPlayingWidget extends Widget {
     private boolean live(){return controller!=null&&!titleOf(controller).isEmpty();}
     private boolean playing(){if(Promo.on)return Promo.playing;PlaybackState s=live()?controller.getPlaybackState():null;return s!=null&&(s.getState()==PlaybackState.STATE_PLAYING||s.getState()==PlaybackState.STATE_BUFFERING);}
     private String appName(String pkg){MainActivity.App a=host.app(pkg);return a==null?"":a.label;}
-    private PlaybackMemory.Item displayed(){PlaybackMemory.Item live=PlaybackMemory.read(controller);return live!=null?live:access?PlaybackMemory.get(getContext()):null;}
+    private PlaybackMemory.Item displayed(){PlaybackMemory.Item live=PlaybackMemory.current(getContext(),controller);return live!=null?live:access?PlaybackMemory.get(getContext()):null;}
     private void resume(){PlaybackMemory.Item item=displayed();if(item!=null)host.launch(item.pkg);}
 
     /** Updates the widget in place; focus moves to a visible control if its control disappears. */
@@ -190,18 +189,11 @@ final class NowPlayingWidget extends Widget {
     }
     private void progress(){
         if(Promo.on){long d=Promo.SONG_LENGTH,p=Promo.position();track.setVisibility(VISIBLE);fill.setVisibility(VISIBLE);fill.setScaleX(p/(float)d);elapsed.setText(time(p));remaining.setText("−"+time(d-p));return;}
-        if(!live()){
-            PlaybackMemory.Item item=displayed();if(item==null)return;
-            if(item.duration<=0){track.setVisibility(INVISIBLE);fill.setVisibility(INVISIBLE);elapsed.setText("");remaining.setText("");return;}
-            track.setVisibility(VISIBLE);fill.setVisibility(VISIBLE);fill.setScaleX(item.position/(float)item.duration);elapsed.setText(time(item.position));remaining.setText("−"+time(Math.max(0,item.duration-item.position)));return;
-        }
-        PlaybackState s=controller.getPlaybackState();MediaMetadata m=controller.getMetadata();
-        long duration=m==null?0:m.getLong(MediaMetadata.METADATA_KEY_DURATION);
-        if(s==null||duration<=0){fill.setScaleX(0);track.setVisibility(INVISIBLE);fill.setVisibility(INVISIBLE);elapsed.setText("");remaining.setText("");return;}
-        long position=s.getPosition();if(s.getState()==PlaybackState.STATE_PLAYING&&s.getLastPositionUpdateTime()>0)position+=(long)((SystemClock.elapsedRealtime()-s.getLastPositionUpdateTime())*s.getPlaybackSpeed());
-        position=Math.max(0,Math.min(duration,position));
-        track.setVisibility(VISIBLE);fill.setVisibility(VISIBLE);fill.setScaleX(position/(float)duration);
-        elapsed.setText(time(position));remaining.setText("−"+time(duration-position));
+        PlaybackMemory.Item item=displayed();if(item==null)return;
+        long duration=item.duration,position=item.positionNow();
+        boolean measured=item.positionKnown&&duration>0;
+        track.setVisibility(measured?VISIBLE:INVISIBLE);fill.setVisibility(measured?VISIBLE:INVISIBLE);fill.setScaleX(measured?position/(float)duration:0);
+        elapsed.setText(item.positionKnown?time(position):"");remaining.setText(measured?"−"+time(Math.max(0,duration-position)):"");
     }
     private static String time(long ms){long s=ms/1000;return s>=3600?String.format(Locale.US,"%d:%02d:%02d",s/3600,s/60%60,s%60):String.format(Locale.US,"%d:%02d",s/60,s%60);}
     private void artwork(PlaybackMemory.Item item){
@@ -214,7 +206,7 @@ final class NowPlayingWidget extends Widget {
         WidgetBoard.IO.execute(()->{Bitmap loaded=null;
             try{InputStream in;if(url.startsWith("http")){HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();c.setConnectTimeout(6000);c.setReadTimeout(8000);in=c.getInputStream();}else in=context.getContentResolver().openInputStream(Uri.parse(url));
                 try(InputStream s=in){BitmapFactory.Options o=new BitmapFactory.Options();o.inPreferredConfig=Bitmap.Config.RGB_565;loaded=BitmapFactory.decodeStream(s,null,o);}}catch(Exception|OutOfMemoryError ignored){}
-            final Bitmap result=loaded;if(result!=null)post(()->{if(url.equals(artKey))fade(result);});});
+            final Bitmap result=loaded;if(result!=null)post(()->{if(url.equals(artKey)){PlaybackMemory.artworkLoaded(context,item,result);fade(result);}});});
     }
     private void fade(Bitmap b){artImage.setImageBitmap(b);if(motion()){artImage.setAlpha(0f);artImage.animate().alpha(1).setDuration(300).start();}}
     private String[] hero(){

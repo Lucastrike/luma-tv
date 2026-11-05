@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.luma.tv" android:versionCode="30" android:versionName="2.5.3">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.luma.tv" android:versionCode="33" android:versionName="2.5.6">
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Home widgets (2.3): Up Next reads Android TV's Continue watching list; Control shows the connection. -->
     <uses-permission android:name="android.permission.READ_TV_LISTINGS" />
@@ -25,6 +25,8 @@
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /><category android:name="android.intent.category.LEANBACK_LAUNCHER" /></intent-filter>
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.HOME" /><category android:name="android.intent.category.DEFAULT" /></intent-filter>
         </activity>
+        <!-- Separate translucent task: closing Inputs reveals the current app instead of bringing Home forward. -->
+        <activity android:name=".InputsActivity" android:exported="false" android:launchMode="singleInstance" android:taskAffinity="" android:theme="@style/InputsTheme" android:noHistory="true" android:excludeFromRecents="true" android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize" android:windowSoftInputMode="adjustNothing" />
         <!-- Observes media sessions for Now Playing and its local resume card; no notification payloads. -->
         <service android:name=".MediaListener" android:label="Luma Now Playing" android:exported="true" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter>

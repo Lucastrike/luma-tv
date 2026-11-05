@@ -7,16 +7,27 @@ BT="$SDK/build-tools/36.0.0"
 ANDROID_JAR="$SDK/platforms/android-34/android.jar"
 export JAVA_HOME="$JDK"
 export PATH="$JDK/bin:$PATH"
-rm -rf build/classes build/dex build/resources.zip build/resources.apk build/unsigned.apk build/overlay build/overlay.zip
-mkdir -p build/classes build/dex dist
 # The Home greeting: LUMA_GREETING, else the first line of .local/greeting.txt, else "Hello".
 GREETING="${LUMA_GREETING:-$(head -n 1 .local/greeting.txt 2>/dev/null || true)}"
 GREETING="${GREETING:-Hello}"
 LUMA_PACKAGE="${LUMA_PACKAGE:-dev.luma.tv}"
 LUMA_LABEL="${LUMA_LABEL:-Luma TV}"
+LUMA_TEST="${LUMA_TEST:-0}"
 APK="${LUMA_APK:-dist/luma-tv.apk}"
 [[ "$LUMA_PACKAGE" =~ ^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$ ]] || { echo 'Invalid LUMA_PACKAGE' >&2; exit 1; }
-python3 - "$LUMA_PACKAGE" "$LUMA_LABEL" "${LUMA_TEST:-0}" <<'PY'
+[[ "$LUMA_TEST" = 0 || "$LUMA_TEST" = 1 ]] || { echo 'LUMA_TEST must be 0 or 1' >&2; exit 1; }
+if [ "$LUMA_TEST" = 1 ]; then
+    [[ "$LUMA_PACKAGE" = *.qa ]] || { echo 'Test instrumentation requires a separate .qa package' >&2; exit 1; }
+fi
+# A custom/test build must never replace the production artifact, including through path aliases.
+python3 - "$LUMA_PACKAGE" "$APK" <<'PY'
+import pathlib, sys
+if sys.argv[1] != 'dev.luma.tv' and pathlib.Path(sys.argv[2]).resolve() == pathlib.Path('dist/luma-tv.apk').resolve():
+    raise SystemExit('A separate package requires a separate LUMA_APK output')
+PY
+rm -rf build/classes build/dex build/resources.zip build/resources.apk build/unsigned.apk build/overlay build/overlay.zip
+mkdir -p build/classes build/dex dist
+python3 - "$LUMA_PACKAGE" "$LUMA_LABEL" "$LUMA_TEST" <<'PY'
 import sys, xml.etree.ElementTree as E
 ns = 'http://schemas.android.com/apk/res/android'
 E.register_namespace('android', ns)
@@ -31,6 +42,11 @@ for component in app:
         component.set('{'+ns+'}name', 'dev.luma.tv'+name)
 if sys.argv[3] == '1':
     E.SubElement(root, 'instrumentation', {'{'+ns+'}name': 'dev.luma.tv.LumaRegression', '{'+ns+'}targetPackage': sys.argv[1]})
+    E.SubElement(app, 'activity', {'{'+ns+'}name': 'dev.luma.tv.ReturnFixture', '{'+ns+'}exported': 'false'})
+    # QA can open the picker over real apps with adb; production keeps it private to the Input service.
+    for component in app:
+        if component.tag == 'activity' and component.get('{'+ns+'}name') == 'dev.luma.tv.InputsActivity':
+            component.set('{'+ns+'}exported', 'true')
 tree.write('build/AndroidManifest.xml', encoding='utf-8')
 PY
 mkdir -p build/overlay/values
@@ -45,7 +61,10 @@ PY
 "$BT/aapt2" compile --dir build/overlay -o build/overlay.zip
 "$BT/aapt2" link -o build/resources.apk -I "$ANDROID_JAR" --manifest build/AndroidManifest.xml --custom-package dev.luma.tv --java build/generated --auto-add-overlay build/resources.zip -R build/overlay.zip
 find src build/generated -name '*.java' > build/sources.txt
-if [ "${LUMA_TEST:-0}" = 1 ]; then echo tools/LumaRegression.java >> build/sources.txt; fi
+if [ "${LUMA_TEST:-0}" = 1 ]; then
+    echo tools/LumaRegression.java >> build/sources.txt
+    echo tools/ReturnFixture.java >> build/sources.txt
+fi
 javac -encoding UTF-8 --release 8 -classpath "$ANDROID_JAR" -d build/classes @build/sources.txt
 find build/classes -name '*.class' > build/classes.txt
 "$BT/d8" --lib "$ANDROID_JAR" --min-api 26 --output build/dex @build/classes.txt
