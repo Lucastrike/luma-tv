@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Restore the saved TV launcher, package states and animation settings."""
+"""Restore the saved TV launcher, optional apps, Luma access changes and animation settings."""
 import argparse
 import json
 import os
@@ -13,6 +13,22 @@ import sys
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 LOCAL = ROOT / ".local"
+OPTIONAL_PACKAGES = {
+    "com.mitv.tvhome.atv", "com.xiaomi.mitv.updateservice", "com.mitv.tvhome.michannel",
+    "com.xiaomi.mitv.mediaexplorer", "com.mitv.videoplayer", "com.xiaomi.mimusic2",
+    "com.mitv.gallery", "com.mitv.dream",
+}
+
+
+def without_services(value, removed):
+    """Recognize Android's short and fully qualified component names without deleting other services."""
+    def canonical(component):
+        package, separator, name = component.partition("/")
+        return package + separator + (package + name if name.startswith(".") else name)
+
+    removed = {canonical(component) for component in removed}
+    return ":".join(component for component in value.split(":")
+                    if component and component != "null" and canonical(component) not in removed)
 
 
 def main():
@@ -26,11 +42,25 @@ def main():
     if not luma_snapshot_path.is_file():
         raise SystemExit("The Luma installation snapshot is missing. Keep xiaomi-estado-antes-luma.json beside this script.")
     luma_snapshot = json.loads(luma_snapshot_path.read_text())
+    extra_path = HERE / "xiaomi-estado-antes-debloat.json"
+    if not extra_path.is_file():
+        raise SystemExit("The optional-app and remote snapshot is missing. Keep xiaomi-estado-antes-debloat.json beside this script.")
+    extra = json.loads(extra_path.read_text())
     expected_model = backup.get("model", "MiTV-MSSP3")
-    if luma_snapshot.get("model", expected_model) != expected_model:
+    if luma_snapshot.get("model", expected_model) != expected_model or extra.get("model") != expected_model:
         raise SystemExit("The saved TV snapshots do not identify the same model.")
     if backup.get("serial") and luma_snapshot.get("serial") != backup["serial"]:
         raise SystemExit("The saved TV snapshots do not identify the same device.")
+    if extra.get("schema_version") != 1 or set(extra.get("packages", {})) != OPTIONAL_PACKAGES:
+        raise SystemExit("The supplemental snapshot does not contain the expected optional apps.")
+    if any(type(value) is not int or value not in range(5) for value in extra["packages"].values()):
+        raise SystemExit("The supplemental snapshot contains an invalid package state.")
+    if extra.get("added_accessibility_services") != ["dev.luma.tv/dev.luma.tv.InputKeyService"] or \
+            extra.get("added_notification_listeners") != ["dev.luma.tv/dev.luma.tv.MediaListener"] or \
+            extra.get("remote_before_luma") != {"enabled_accessibility_services": "", "accessibility_enabled": "0"}:
+        raise SystemExit("The supplemental snapshot does not match the recorded Luma access changes.")
+    packages = dict(extra["packages"])
+    packages.update(backup["packages"])  # The original baseline always wins over a later snapshot.
     serial = args.address or backup.get("serial")
     if not serial:
         if args.dry_run:
@@ -69,7 +99,8 @@ def main():
         return result.stdout.strip()
 
     def shell(*arguments, **kwargs):
-        return run(["-s", serial, "shell", *arguments], **kwargs)
+        # adb joins shell arguments remotely; quote once so an empty service list remains an argument.
+        return run(["-s", serial, "shell", shlex.join(arguments)], **kwargs)
 
     run(["connect", serial], check=False)
     state = run(["-s", serial, "get-state"], check=False)
@@ -79,6 +110,28 @@ def main():
     if not args.dry_run and model != expected_model:
         raise SystemExit("The connected device is not the expected Xiaomi. No changes were made.")
 
+    # Remove only access granted to Luma; preserve unrelated services configured after the original snapshot.
+    for setting, added in [("enabled_accessibility_services", extra["added_accessibility_services"]),
+                           ("enabled_notification_listeners", extra["added_notification_listeners"])]:
+        current = shell("settings", "get", "secure", setting)
+        if args.dry_run:
+            print("# Remove only " + ":".join(added) + " from " + setting + "; preserve other entries.")
+            continue
+        restored = without_services(current, added)
+        normalized = "" if current == "null" else current
+        if restored != normalized:
+            shell("settings", "put", "secure", setting, restored)
+        if setting == "enabled_accessibility_services" and not restored:
+            shell("settings", "put", "secure", "accessibility_enabled", extra["remote_before_luma"]["accessibility_enabled"])
+        actual = shell("settings", "get", "secure", setting)
+        if ("" if actual == "null" else actual) != restored:
+            raise SystemExit("Luma access was not removed: " + setting)
+        if setting == "enabled_accessibility_services" and not restored and \
+                shell("settings", "get", "secure", "accessibility_enabled") != "0":
+            raise SystemExit("Accessibility activation was not restored. No launcher was removed.")
+    if args.dry_run:
+        print("# Restore accessibility_enabled=0 only if no unrelated accessibility services remain.")
+
     # Make the original home available before altering the replacement.
     original_home_package = backup["original_home"].split("/", 1)[0]
     shell("pm", "enable", "--user", "0", original_home_package)
@@ -86,7 +139,7 @@ def main():
     shell("cmd", "package", "set-home-activity", "--user", "0", backup["original_home"])
 
     operations = {0: "default-state", 1: "enable", 2: "disable", 3: "disable-user", 4: "disable-until-used"}
-    for package, value in backup["packages"].items():
+    for package, value in packages.items():
         shell("pm", operations[value], "--user", "0", package)
     for name, value in backup["animations"].items():
         if value == "null":
@@ -101,7 +154,7 @@ def main():
 
     # Verify exact saved values before removing either replacement launcher.
     if not args.dry_run:
-        for package, value in backup["packages"].items():
+        for package, value in packages.items():
             raw = shell("dumpsys", "package", package)
             match = re.search(r"User 0:.*?installed=true.*?enabled=(\d+)", raw)
             if not match or int(match.group(1)) != value:
@@ -125,7 +178,7 @@ def main():
             if not args.dry_run and result != "Success":
                 raise SystemExit("The original home works, but removing the added launcher failed: " + package)
 
-    print("Plan displayed." if args.dry_run else "Original home, package states and animation settings restored.")
+    print("Plan displayed." if args.dry_run else "Original home, optional apps, Luma access changes and animation settings restored.")
 
 
 if __name__ == "__main__":

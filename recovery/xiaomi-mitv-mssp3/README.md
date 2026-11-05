@@ -1,90 +1,110 @@
-# Restaurar la Xiaomi MiTV-MSSP3 al estado original
+# Restore the Xiaomi MiTV-MSSP3 to its original configuration
 
-Este directorio conserva la recuperación de la Xiaomi P1E con Android 9 configurada el **3 de noviembre de 2026**. Su único destino es la configuración anterior a la limpieza y a la instalación de Luma. FLauncher no es una alternativa de recuperación.
+This directory preserves recovery for the reference Xiaomi P1E running Android 9. Its destination is the
+configuration before cleanup and Luma installation on **November 3, 2026**. FLauncher is not an alternate
+recovery destination. The supplemental snapshot from **November 5** covers eight optional Xiaomi apps
+and the access changes made for Luma's remote shortcut and media listener.
 
-El script y los registros proceden de la intervención realizada en esa tele. Las copias publicadas conservan los estados necesarios para restaurar la configuración, con la dirección de red y las rutas de instalación particulares retiradas. Los registros íntegros se conservan únicamente en almacenamiento local privado.
+Published snapshots retain the states needed for restoration without the TV address, installation paths,
+accounts, or raw diagnostics. Complete private records remain under the ignored `.local/` directory.
 
-## Qué restaura
+## What the script restores
 
-1. Comprueba la conexión autorizada y el modelo `MiTV-MSSP3`.
-2. Habilita primero el inicio original de Google y PatchWall.
-3. Recupera el inicio `com.google.android.tvlauncher/.MainActivity` y los estados originales de `com.miui.tv.analytics`, `com.xiaomi.statistic`, `com.google.android.tvlauncher` y `com.mitv.tvhome.atv`.
-4. Restablece y verifica las tres escalas de animación: `1.0`, `1.0` y ausencia de valor explícito para `animator_duration_scale`.
-5. Comprueba que Home resuelve al inicio original y lo abre.
-6. Retira Luma y cualquier resto de FLauncher que se hubiera añadido durante esta intervención. Las aplicaciones y datos que existían antes se conservan.
+1. Verify the authorized ADB connection, model, and consistency of all three snapshots before changing anything.
+2. Remove only Luma's Input accessibility service and media notification-listener entry. Preserve unrelated
+   services configured later. Restore `accessibility_enabled=0` only when no other accessibility service remains.
+3. Enable the original Google Home and PatchWall before changing the replacement launcher.
+4. Restore `com.google.android.tvlauncher/.MainActivity`, the original four package states, and the eight
+   optional Xiaomi app states. The original snapshot takes precedence where records overlap.
+5. Restore and verify the three animation settings: `1.0`, `1.0`, and no explicit `animator_duration_scale`.
+6. Verify every saved package state and Home resolution, then open the original Home.
+7. Remove Luma and any remaining FLauncher added during the intervention. Preserve apps that predated it.
 
-Si no puede verificar el inicio original, los estados o las animaciones, se detiene antes de desinstalar los launchers añadidos.
+The optional packages are PatchWall, PatchWall Update Service, Mi Channel, Reproductor multimedia,
+Mi TV Video Player, Music Player, Galeria, and Fondos de pantalla Mi. Their package IDs and exact enabled
+states are recorded in `xiaomi-estado-antes-debloat.json`. Restoration uses the saved state, rather than
+assuming every app should have an explicit `enabled` override.
 
-## Archivos que deben conservarse
+If access removal, package states, animations, or original Home cannot be verified, the script stops
+before uninstalling replacement launchers. It does not uninstall any Xiaomi system app or clear app data.
+The Luma Input filter was found to suppress held volume/channel repetition on this firmware. Disabling
+that filter restored repetition, as confirmed by the user; the global physical Input shortcut then stopped
+opening a menu. Restoring to origin removes that Luma filter too. No repeat timing, Bluetooth pairing,
+key layout, or firmware was changed. The in-launcher Inputs selector remains available while using Luma.
 
-| Archivo | Contenido |
+## Required files
+
+| File | Purpose |
 | --- | --- |
-| [restaurar-xiaomi.py](restaurar-xiaomi.py) | Script de restauración. |
-| [xiaomi-estado-antes-optimizacion.json](xiaomi-estado-antes-optimizacion.json) | Inicio, estados de paquetes y animaciones originales. Es la referencia de restauración. |
-| [xiaomi-estado-antes-luma.json](xiaomi-estado-antes-luma.json) | Registro que confirma que Luma no estaba instalado antes. Su configuración de FLauncher es histórica y no se usa como destino de restauración. |
-| [xiaomi-prueba-restauracion-original.json](xiaomi-prueba-restauracion-original.json) | Resultado de la restauración completa verificada en la TV el 3 de noviembre de 2026. |
+| [restaurar-xiaomi.py](restaurar-xiaomi.py) | Recovery script. |
+| [xiaomi-estado-antes-optimizacion.json](xiaomi-estado-antes-optimizacion.json) | Original Home, four package states, and animations; authoritative baseline. |
+| [xiaomi-estado-antes-luma.json](xiaomi-estado-antes-luma.json) | Confirms Luma was absent initially. Its historical FLauncher state is not a recovery destination. |
+| [xiaomi-estado-antes-debloat.json](xiaomi-estado-antes-debloat.json) | Additional package states captured before disabling the eight apps, and the Luma access changes to reverse. |
+| [xiaomi-prueba-restauracion-original.json](xiaomi-prueba-restauracion-original.json) | Evidence of the original complete restoration on November 3. It does not test the later extension. |
 
-Los dos archivos de estado deben permanecer junto al script. No se deben sustituir por una captura de la TV ya modificada: se perdería la referencia original. El campo `serial` publicado es `null`; la dirección o el identificador ADB se proporciona en cada ejecución con `--address`.
+Keep all three state snapshots beside the script. **Never replace the original snapshots with a later
+optimized state.** The script requires the supplemental snapshot too, so a missing copy cannot silently
+skip the additional package or remote changes. Device addresses are supplied at execution with `--address`.
 
-## Requisitos
+## Requirements
 
-- Python 3 y [ADB de Android Platform Tools](https://developer.android.com/tools/releases/platform-tools).
-- El ordenador y la tele en la misma red.
-- Depuración habilitada y conexión del ordenador autorizada en la pantalla de la TV.
+- Python 3 and [Android Platform Tools / ADB](https://developer.android.com/tools/releases/platform-tools).
+- The computer and TV on the same network, with debugging enabled and this computer authorized on the TV.
 
-El script busca ADB, en este orden: `--adb`, `.local/android-tools/platform-tools/adb` y el `PATH`. Usa el puerto **5038** del servidor ADB que se empleó durante la intervención. Las claves locales se guardan en `.local/adb-state/`.
+ADB is selected from `--adb`, `.local/android-tools/platform-tools/adb`, or `PATH`, in that order. The
+server port is **5038**, and local ADB state is under `.local/adb-state/`. A fresh clone needs its own
+ADB installation and device authorization. Keys, tools, private backups, and execution logs are not published.
 
-`.local/` está excluido de Git: ni las herramientas descargadas, ni las claves ADB, ni los registros de ejecución se publican con el código. Un clon nuevo necesita ADB y su propia autorización en la TV.
+## Preview without contacting the TV
 
-## Ver el plan sin modificar la TV
-
-Desde la raíz del repositorio:
+Run from the repository root:
 
 ```sh
 python3 recovery/xiaomi-mitv-mssp3/restaurar-xiaomi.py --dry-run
 ```
 
-El modo de simulación funciona sin ADB instalado: muestra los comandos y no contacta con la tele ni crea claves o registros.
+This works without ADB installed, executes no device commands, and creates no keys or journal. Because
+service lists depend on current device settings, the plan describes removal of Luma entries while
+preserving other entries; it does not invent a future list of accessibility or notification services.
 
-## Ejecutar la restauración
-
-Desde la raíz del repositorio:
+## Run recovery
 
 ```sh
-python3 recovery/xiaomi-mitv-mssp3/restaurar-xiaomi.py --address IP_DE_LA_TV:5555
+python3 recovery/xiaomi-mitv-mssp3/restaurar-xiaomi.py --address TV_IP:5555
 ```
 
-La dirección de la TV no se guarda en el repositorio. Sustituir `IP_DE_LA_TV:5555` por su dirección actual o identificador ADB. Sin `--address`, una ejecución real se detiene antes de contactar con ningún dispositivo. El modo `--dry-run` utiliza un marcador y sigue funcionando sin dirección.
+Replace `TV_IP:5555` with the current TV address or ADB serial. An actual run without an address stops
+before contacting a device. To select another ADB executable, append `--adb /path/to/platform-tools/adb`.
+If the TV requests debugging authorization, accept it and rerun the command.
 
-Para indicar una copia concreta de ADB:
+Results are written to `.local/recovery/xiaomi-restauracion-resultado.json`. If recovery stops, the journal
+records the last completed step. Remote shell arguments are quoted so empty service lists are preserved
+and settings values are not interpreted as shell syntax.
+
+The generic inherited `./luma.sh restore` reverses its own Home changes. **Use the dedicated script above
+for this reference TV**, including optional apps, Luma access entries, original analytics states, and animations.
+
+## Recover Home without ADB
+
+1. Open Android Settings, then Apps, and show system apps.
+2. Enable **Android TV Home** (`com.google.android.tvlauncher`) and **PatchWall** (`com.mitv.tvhome.atv`).
+3. Open the original Home, select it as default if asked, then uninstall Luma TV.
+
+These steps recover Home. To restore exact package/access/animation states too, run the dedicated script
+when ADB is available again. Removing Luma through Android also removes its own service authorization.
+
+## Evidence and limits
+
+The original restoration was executed on the TV on November 3: the original Home, four package states,
+and three animation values were verified, and Luma/FLauncher were absent. Luma was subsequently installed
+again. The extended recovery path is checked with simulated ADB and dry-run; it is not executed on the TV
+merely to test it, because that would remove the current launcher and undo the requested configuration.
+
+The backup covers the described settings, not the entire firmware, accounts, deleted files, or data removed
+by cleaners. Debugging remains as in the original reference, enabled by the user.
+
+Run the recovery safeguards without a TV:
 
 ```sh
-python3 recovery/xiaomi-mitv-mssp3/restaurar-xiaomi.py --address IP_DE_LA_TV:5555 --adb /ruta/a/platform-tools/adb
-```
-
-Si la TV solicita autorización de depuración, aceptarla y repetir el comando. El resultado se guarda en `.local/recovery/xiaomi-restauracion-resultado.json`; si se detiene, ese registro muestra el último paso ejecutado.
-
-El comando original `./luma.sh restore` sigue siendo la recuperación genérica de Luma. Para esta tele, el script de este directorio también restaura PatchWall, estadísticas y animaciones, y retira Luma.
-
-## Recuperar el inicio desde la TV
-
-Si no hay acceso por ADB:
-
-1. Abrir Ajustes de Android desde el menú de ajustes de la tele.
-2. Entrar en Aplicaciones y mostrar las aplicaciones del sistema.
-3. Habilitar **Android TV Home** (`com.google.android.tvlauncher`) y **PatchWall** (`com.mitv.tvhome.atv`).
-4. Una vez habilitados, desinstalar **Luma TV** y pulsar Home. Si Android pregunta qué inicio usar, elegir **Android TV Home**.
-
-Esto recupera el inicio. Para restaurar también los estados exactos de los servicios y las animaciones, ejecutar el script cuando vuelva a haber acceso ADB.
-
-## Alcance y comprobaciones
-
-La restauración completa se ejecutó y verificó en la TV: volvieron el inicio original, los cuatro estados de paquetes y los tres valores de animación, y se comprobó la ausencia de Luma y FLauncher. Después se reinstaló Luma oficial y se reaplicó la limpieza. La adaptación de rutas a este repositorio se comprueba mediante simulación y pruebas con ADB simulado; no se vuelve a restaurar la TV por copiar estos archivos.
-
-El respaldo cubre los cambios de configuración descritos. No es una imagen completa del firmware ni una copia de las cuentas, y no recupera archivos o datos que un limpiador haya borrado. La depuración queda como estaba en la referencia inicial, ya habilitada por el usuario.
-
-Para verificar los controles del script sin una TV:
-
-```sh
-python3 -m unittest discover -s recovery/xiaomi-mitv-mssp3 -p 'test_*.py'
+python3 -m unittest discover -s recovery/xiaomi-mitv-mssp3 -p 'test_*.py' -v
 ```

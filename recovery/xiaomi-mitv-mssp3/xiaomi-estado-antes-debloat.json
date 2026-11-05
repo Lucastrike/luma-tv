@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-11-05T13:21:21.333575+00:00",
+  "model": "MiTV-MSSP3",
+  "packages": {
+    "com.mitv.tvhome.atv": 0,
+    "com.xiaomi.mitv.updateservice": 0,
+    "com.mitv.tvhome.michannel": 0,
+    "com.xiaomi.mitv.mediaexplorer": 0,
+    "com.mitv.videoplayer": 0,
+    "com.xiaomi.mimusic2": 0,
+    "com.mitv.gallery": 0,
+    "com.mitv.dream": 0
+  },
+  "remote_before_luma": {
+    "enabled_accessibility_services": "",
+    "accessibility_enabled": "0"
+  },
+  "added_accessibility_services": [
+    "dev.luma.tv/dev.luma.tv.InputKeyService"
+  ],
+  "added_notification_listeners": [
+    "dev.luma.tv/dev.luma.tv.MediaListener"
+  ],
+  "notes": [
+    "Package states were captured before the eight optional Xiaomi apps were disabled.",
+    "The earlier original-state snapshot takes precedence for packages it already records.",
+    "Recovery removes only Luma service entries and preserves unrelated services added later.",
+    "No key layout, Bluetooth pairing or repeat timing was changed."
+  ]
+}

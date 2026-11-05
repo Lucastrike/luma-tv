@@ -44,9 +44,11 @@ Android 8.0 and later, but this does not establish compatibility with every TV.
 
 - **Input needs setup on this Xiaomi.** The firmware sends the key to Android TV Home, which is disabled to
   keep Luma as the Home app. The optional **Luma Input button** service can intercept it first. Activation
-  is complete on the reference TV. The user confirmed Input over content, arrow keys, OK, and Back on
-  version 2.5.6. **Settings → Remote Input
-  button** provides setup and access to the selector. The **Inputs** section remains available.
+  initially let the user confirm Input over content, arrows, OK, and Back on 2.5.6. Later held-button
+  testing found that the active filter stopped volume/channel repetition on this firmware. The filter
+  is now disabled on the reference TV: repetition is restored, but the global physical Input shortcut
+  is unavailable. **Settings → Remote Input button** and the **Inputs** section still open the in-app
+  selector. See the [optional-app and remote report](docs/xiaomi-optional-apps-2026-11-05.md).
 - **Now Playing requires notification access.** This TV does not provide the screen to grant it. Permission
   requires explicit authorization and is not granted by installing an update. Activation and playback
   verification are recorded in the update reports. Access is enabled on the reference TV; the installed
@@ -134,7 +136,9 @@ python3 recovery/xiaomi-mitv-mssp3/restaurar-xiaomi.py --dry-run
 ```
 
 The `--dry-run` mode displays the plan without contacting the TV. An actual run enables the original Home app
-and PatchWall, restores the saved package and animation states, and removes Luma after verifying them.
+and PatchWall, restores the saved package and animation states (including the eight optional Xiaomi apps),
+removes Luma's accessibility and notification-listener entries while preserving other services, and removes
+Luma after verifying the restored state.
 This backup covers configuration; it cannot recover original data or files that have been deleted.
 
 ## Usage and customization
