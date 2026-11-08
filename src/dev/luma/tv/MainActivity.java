@@ -110,6 +110,8 @@ public final class MainActivity extends Activity {
         createShell();
         discover();
         if(InputKeyService.SHOW_INPUTS.equals(getIntent().getAction()))root.post(this::openInputs);
+        if(NativeInputService.SETTINGS.equals(getIntent().getAction()))root.post(this::inputButtonSettings);
+        NativeInputService.restore(this);
     }
 
     @Override protected void onResume() {
@@ -144,6 +146,7 @@ public final class MainActivity extends Activity {
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         if(InputKeyService.SHOW_INPUTS.equals(intent.getAction())){root.post(this::openInputs);return;}
+        if(NativeInputService.SETTINGS.equals(intent.getAction())){root.post(this::inputButtonSettings);return;}
         String look=intent.getStringExtra("luma.daylight");
         if(look!=null&&look.matches("day|night|auto")){daylightOverride=look;if(started)syncDaylight();}
         String demo=intent.getStringExtra("luma.demo");if(demo!=null){Promo.on=demo.equals("promo");if(Promo.on)Promo.start(this);board=null;homePage=0;showPage("home",true);} // board=null: start on the first page
@@ -654,7 +657,7 @@ public final class MainActivity extends Activity {
     }
     private void trapFocus(boolean on){int mode=on?ViewGroup.FOCUS_BLOCK_DESCENDANTS:ViewGroup.FOCUS_BEFORE_DESCENDANTS;content.setDescendantFocusability(mode);((ViewGroup)nav()).setDescendantFocusability(mode);}
     private FrameLayout openOverlay(int scrim){
-        // One overlay replacing another (About → Support) keeps the original place to return to.
+        // Replacing an overlay keeps the original place to return to.
         View back=overlay!=null?overlayReturn:getCurrentFocus();overlayReturn=null;closeOverlay(false);overlayReturn=back;
         trapFocus(true); // the page and tabs behind a dialog take no focus while it is open
         overlay=new FrameLayout(this);overlay.setBackgroundColor(scrim);overlay.setClipChildren(false);overlay.setTranslationZ(px(120));
@@ -745,32 +748,12 @@ public final class MainActivity extends Activity {
         panel.addView(text("Luma TV",26,Color.WHITE,"sans-serif-medium"),pos(380,34,26,24));
         panel.addView(text("Version "+version(),13,0x99FFFFFF,"sans-serif"),pos(380,18,27,62));
         TextView body=text("A calm home screen for Android TV. No ads, no sponsored rows, no tracking: your settings stay on this TV. Hold OK on an app to organise your Home.",13,0xC7FFFFFF,"sans-serif");body.setLineSpacing(px(4),1);panel.addView(body,pos(380,66,27,94));
-        panel.addView(text("Made by "+about("author"),15,Color.WHITE,"sans-serif-medium"),pos(380,22,27,172));
-        String links=about("x").replaceFirst("^https?://","")+"\n"+about("github").replaceFirst("^https?://","");
-        TextView link=text(links,12,0xB3FFFFFF,"sans-serif");link.setLineSpacing(px(4),1);panel.addView(link,pos(380,40,27,198));
+        panel.addView(text(about("source").replaceFirst("^https?://",""),15,Color.WHITE,"sans-serif-medium"),pos(380,22,27,172));
+        panel.addView(text(about("issues").replaceFirst("^https?://",""),12,0xB3FFFFFF,"sans-serif"),pos(380,20,27,200));
+        panel.addView(text("Based on "+about("upstream").replaceFirst("^https?://github.com/",""),12,0x99FFFFFF,"sans-serif"),pos(380,20,27,230));
         panel.addView(qr("qr_source"),pos(150,150,426,28));
         TextView caption=text("Source code",12,0x99FFFFFF,"sans-serif");caption.setGravity(Gravity.CENTER);panel.addView(caption,pos(150,18,426,184));
-        LinearLayout list=new LinearLayout(this);list.setOrientation(LinearLayout.HORIZONTAL);panel.addView(list,pos(400,42,26,262));
-        LinearLayout a=new LinearLayout(this),b=new LinearLayout(this);a.setOrientation(LinearLayout.VERTICAL);b.setOrientation(LinearLayout.VERTICAL);
-        list.addView(a,new LinearLayout.LayoutParams(px(200),-1));LinearLayout.LayoutParams gap=new LinearLayout.LayoutParams(px(110),-1);gap.leftMargin=px(10);list.addView(b,gap);
-        menuRow(a,"Support the author",false,this::supportScreen);View done=menuRow(b,"Done",false,()->closeOverlay(false));((TextView)done).setGravity(Gravity.CENTER);
-        root.post(done::requestFocus);
-    }
-    /** Crypto tips: a QR code per coin from res/raw/support.txt (drawn by tools/support-qr.sh). */
-    private void supportScreen(){
-        FrameLayout o=openOverlay(0xF20B0B0D);
-        TextView title=text("Support the author",30,Color.WHITE,"sans-serif-medium");title.setLetterSpacing(-.02f);o.addView(title,pos(700,40,48,38));
-        TextView body=text("Luma is free and has no ads. If it earned a place on your TV, a tip in crypto helps it grow. Scan a code with your phone's wallet, and send each coin only over the network named on its card.",13,0xC7FFFFFF,"sans-serif");
-        body.setLineSpacing(px(4),1);o.addView(body,pos(760,44,48,84));
-        ArrayList<String[]> coins=rawLines(R.raw.support);int n=Math.max(1,Math.min(4,coins.size()));float w=(864-(n-1)*16)/(float)n;
-        for(int i=0;i<Math.min(4,coins.size());i++){String[] c=coins.get(i);
-            FrameLayout card=new FrameLayout(this);card.setBackground(shape(0x1AFFFFFF,18));o.addView(card,pos(w,322,48+i*(w+16),146));
-            TextView name=text(c[0],14,Color.WHITE,"sans-serif-medium");name.setSingleLine(true);name.setEllipsize(android.text.TextUtils.TruncateAt.END);card.addView(name,pos(w-28,20,14,14));
-            TextView note=text(c.length>1?c[1]:"",10.5f,0x99FFFFFF,"sans-serif");note.setMaxLines(2);card.addView(note,pos(w-28,30,14,37));
-            float side=Math.min(w-40,170);card.addView(qr("qr_"+i),pos(side,side,(w-side)/2,74));
-            TextView address=text(c.length>2?c[2]:"",10,0xD9FFFFFF,"monospace");address.setGravity(Gravity.CENTER);address.setLineSpacing(px(2),1);card.addView(address,pos(w-24,58,12,82+side));
-        }
-        LinearLayout list=new LinearLayout(this);list.setOrientation(LinearLayout.VERTICAL);o.addView(list,pos(140,42,410,482));
+        LinearLayout list=new LinearLayout(this);list.setOrientation(LinearLayout.VERTICAL);panel.addView(list,pos(128,42,446,262));
         View done=menuRow(list,"Done",false,()->closeOverlay(false));((TextView)done).setGravity(Gravity.CENTER);root.post(done::requestFocus);
     }
     // Stock launchers that luma.sh may have switched off to let Luma be the home screen.
@@ -980,11 +963,10 @@ public final class MainActivity extends Activity {
         controls.add(option(list,"Home screen",()->lumaIsHome()?"Luma":"TV default",null,this::homeScreen,
             ()->preview(0,"Home screen",lumaIsHome()?"Luma opens when you press Home. Choose to return to your TV's own home screen.":"Your TV's own home screen opens when you press Home.")));
         caption(list,"System",false);
-        if(InputsWidget.count>0)controls.add(option(list,"Remote Input button",()->InputKeyService.enabled(this)?"Enabled":"Set up",null,this::inputButtonSettings,
-            ()->preview(0,"Remote Input button","Use the remote Input button to open Luma inputs. Some TVs need the optional Luma Input button accessibility service.")));
+        if(InputsWidget.count>0)controls.add(option(list,"Remote Input button",()->NativeInputService.supported(this)?NativeInputService.summary(this):InputKeyService.enabled(this)?"Enabled":"Set up",null,this::inputButtonSettings,
+            ()->preview(0,"Remote Input button","Open Luma inputs with the remote Input button. Setup depends on your TV.")));
         controls.add(option(list,"Device settings",()->"",null,()->startActivity(new Intent(Settings.ACTION_SETTINGS)),()->preview(0,"Device settings","Network, picture, sound and accounts.")));
-        controls.add(option(list,"Support the author",()->"",null,this::supportScreen,()->preview(0,"Support the author","Luma is free and has no ads. A tip in crypto helps it grow.")));
-        controls.add(option(list,"About Luma",()->"",null,this::aboutScreen,()->preview(0,"About Luma","Version "+version()+" · made by "+about("author"))));
+        controls.add(option(list,"About Luma",()->"",null,this::aboutScreen,()->preview(0,"About Luma","Version "+version()+" · "+about("project"))));
         content.setTag(controls);
         preview(THUMBS[wp],WALLPAPERS[wp],"Eight wallpapers, from silver silk to the Milky Way. Silver is light by day and dark after sunset.");
         if (focus) root.post(()->controls.get(0).requestFocus());
@@ -996,6 +978,20 @@ public final class MainActivity extends Activity {
         });
     }
     private void inputButtonSettings(){
+        if(NativeInputService.supported(this)){
+            boolean enabled=NativeInputService.enabled(this);
+            menu("Remote Input button",new String[]{"Open input selector",enabled?"Turn off remote shortcut":"Enable remote shortcut","Setup help","About this shortcut"},-1,choice->{
+                if(choice==0){openInputs();return;}
+                if(choice==1){
+                    if(InputKeyService.enabled(this)){notice("Remote button setup","Turn off Luma Input button in Accessibility first. Its key filter affects held volume and channel buttons on this TV.");return;}
+                    if(!enabled&&NativeInputService.requiresRestart(this)){notice("Restart Luma","Log access has been granted, but Android applies it when Luma starts again. Restart Luma from the connected computer, or restart the TV, then enable this shortcut.");return;}
+                    if(!NativeInputService.setEnabled(this,!enabled))notice("Remote button setup","This shortcut needs a one-time setup from a connected computer. Choose Setup help for instructions.");
+                    return;
+                }
+                if(choice==2){notice("Remote button setup","From a connected computer, run: adb shell pm grant "+getPackageName()+" android.permission.READ_LOGS\n\nRestart Luma or the TV, then choose Enable remote shortcut. This permission allows reading system logs. Luma limits its reader to the native Input event and its own startup marker.");return;}
+                notice("About the Input shortcut","Luma observes Xiaomi's native Input event and opens the selector above the current app. It does not filter or resend remote keys. A small background service restores the shortcut after restarting the TV. Its notification and this menu let you turn it off.");
+            });return;
+        }
         menu("Remote Input button",new String[]{"Open input selector","Set up remote button","About this shortcut"},-1,choice->{
             if(choice==0){openInputs();return;}
             if(choice==1){

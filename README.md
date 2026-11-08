@@ -3,7 +3,7 @@
 An Android TV and Google TV launcher based on [Luma by 0xProbabillity](https://github.com/0xProbabillity/luma-tv).
 This fork maintains our fixes and an installation signed with our own key.
 
-The current version is **2.5.6**, with the package ID **`dev.luma.tv`**. On the reference Xiaomi P1E, it replaces
+The current version is **2.5.8**, with the package ID **`dev.luma.tv`**. On the reference Xiaomi P1E, it replaces
 the original author's installation and serves as the default Home app. Subsequent updates use the same
 signing key and preserve application data.
 
@@ -23,7 +23,7 @@ may also come from that demo.
 | Up Next management | **Settings → Up Next** explains the data sources and lets you reset what Luma displays. Later activity may appear again. |
 | TV inputs | Groups tuners with the same provider, service, and label. Preserves input names and opens the tuner as live TV. Both selectors and the widget prefer **TV → SERIES X → HDMI 1 → AV → Barra de sonido**. |
 | TV tuner | The antenna/cable tuner is named **TV** in the widget and input selector. |
-| Remote Input button | Optional **Luma Input button** accessibility service opens a dedicated translucent selector above the current app or TV input. Back restores the previous app, Input toggles the menu, and OK opens the chosen input. Android manages the window and arrow-key focus. It requires explicit activation. |
+| Remote Input button | On the reference Xiaomi, an optional native-event bridge opens the translucent selector without a key filter. Back restores the previous app, Input toggles the menu, and OK opens the chosen input. One-time computer setup and explicit activation are required. Other TVs retain the legacy accessibility setup. |
 | YouTube and Netflix | Use the installed app's banner, falling back to its icon. YouTube no longer uses a logo drawn by Luma. |
 | Now Playing access | Checks whether the permission screen exists. If unavailable, **Setup help** explains setup from a connected computer. |
 | Resume media | Keeps the last video's title, artwork when available, and paused progress after its app removes the session. Preview bitmaps are saved locally across process restarts; closing updates do not erase a known position. **Resume** opens the source app. Media sessions are observed while Home is off screen. |
@@ -31,24 +31,26 @@ may also come from that demo.
 | Return focus | Returning from an app with Back or Home restores the previous page and selected component, including the widget page and scroll position. Saved navigation also survives activity recreation. |
 | Focus animation | Keeps artwork aligned with the card, reduces shadows, and gives navigation priority over the animated wallpaper. Flat photographic backgrounds stay still during focus changes. |
 | Builds and tests | Supports custom package IDs and labels for test installations. The QA suite produces a separate APK from the production build. |
+| About Luma | Links to this fork's repository and issue tracker, with a source-code QR and a brief upstream credit. The inherited donation entry and screen are removed. |
 | Xiaomi recovery | Includes the script, guide, and saved states needed to restore the reference TV's original configuration. |
 
 Details and completed checks are recorded in the [initial fix report](docs/fixes-2026-11-03.md) and the
 [2.5.2 update](docs/fixes-2.5.2.md), [2.5.3 update](docs/fixes-2.5.3.md), [2.5.4 update](docs/fixes-2.5.4.md),
-the [2.5.5 update](docs/fixes-2.5.5.md), and [2.5.6 update](docs/fixes-2.5.6.md).
+the [2.5.5 update](docs/fixes-2.5.5.md), [2.5.6 update](docs/fixes-2.5.6.md),
+[2.5.7 native Input update](docs/fixes-2.5.7.md), and [2.5.8 project links update](docs/fixes-2.5.8.md).
 
 ## Status and limitations
 
 The tested reference device is a **Xiaomi P1E / MiTV-MSSP3 running Android 9**. The manifest supports
 Android 8.0 and later, but this does not establish compatibility with every TV.
 
-- **Input needs setup on this Xiaomi.** The firmware sends the key to Android TV Home, which is disabled to
-  keep Luma as the Home app. The optional **Luma Input button** service can intercept it first. Activation
-  initially let the user confirm Input over content, arrows, OK, and Back on 2.5.6. Later held-button
-  testing found that the active filter stopped volume/channel repetition on this firmware. The filter
-  is now disabled on the reference TV: repetition is restored, but the global physical Input shortcut
-  is unavailable. **Settings → Remote Input button** and the **Inputs** section still open the in-app
-  selector. See the [optional-app and remote report](docs/xiaomi-optional-apps-2026-11-05.md).
+- **Input needs setup on this Xiaomi.** Its old accessibility filter stopped held volume/channel repetition
+  and remains disabled. Version 2.5.7 adds an optional native-event bridge with a one-time `READ_LOGS` grant
+  and explicit activation. Production 2.5.7 passed native-route opening, toggling, return-window, standby
+  and reboot checks on the reference TV. After reboot, the user confirmed physical Input,
+  arrows, Back and held volume/channel repetition. The bridge depends on this firmware's native event message. See the
+  [2.5.7 report](docs/fixes-2.5.7.md) and the earlier
+  [held-key comparison](docs/xiaomi-optional-apps-2026-11-05.md).
 - **Now Playing requires notification access.** This TV does not provide the screen to grant it. Permission
   requires explicit authorization and is not granted by installing an update. Activation and playback
   verification are recorded in the update reports. Access is enabled on the reference TV; the installed
@@ -150,9 +152,9 @@ This backup covers configuration; it cannot recover original data or files that 
 - **Up Next:** **Settings → Up Next → Reset Up Next** resets its local presentation.
 - **Appearance:** configure backgrounds, the clock, name, motion, and sounds in **Settings**.
 - **Weather:** **Weather location** sets a city; **Temperature** selects Celsius or Fahrenheit.
-- **In-app attribution:** inherited credits and links are in
-  [`res/raw/about.txt`](res/raw/about.txt) and [`res/raw/support.txt`](res/raw/support.txt). Support recipients
-  shown in the interface belong to the original author; those donations do not go to this fork.
+- **About Luma:** shows this fork's repository, issue tracker, and source-code QR, with a brief credit to
+  the original project. Links are configured in [`res/raw/about.txt`](res/raw/about.txt); redraw the QR with
+  [`tools/source-qr.sh`](tools/source-qr.sh) after changing the source URL. Donation screens are removed.
 
 The local recent-app log only records apps opened by Luma. With usage access, it can also query activity
 reported by Android. The inherited `./luma.sh widgets` command grants several permissions together—TV listings,
@@ -225,6 +227,8 @@ inactive until explicitly enabled in Android.
 
 The [2.5.6 security review](docs/security-review-2.5.6.md) records the checked release boundaries and the
 remaining inherited HTTP and optional House Control risks. It is not a device firmware or penetration-test certification.
+The [2.5.8 publication review](docs/security-review-2.5.8.md) covers the native Input permission boundary,
+production APK, and secret/history checks for the current changes.
 
 ## Origin, assets, and license
 
@@ -243,4 +247,3 @@ some other icons retain drawn representations from the original project.
   [`artwork/reproject.py`](artwork/reproject.py).
 - **Silver / Silk:** backgrounds rendered by the scripts under [`artwork/`](artwork).
 - **Sounds:** synthesized by [`tools/generate_sounds.py`](tools/generate_sounds.py).
-- **Original author support icons:** [Web3 Icons](https://github.com/0xa3k5/web3icons), licensed under MIT.

@@ -38,6 +38,15 @@ public final class LumaRegression extends Instrumentation {
             test("Input menu: repeated Input closes to the same app",()->inputMenu("toggle"));
             test("Input menu: OK opens the selected input and leaves no menu behind",()->inputMenu("select"));
             test("Input menu: Home leaves no menu behind",()->inputMenu("home"));
+            test("Native Input setup is protected and boot restoration stays internal",()->{
+                android.content.pm.PackageManager pm=activity.getPackageManager();
+                android.content.pm.ServiceInfo service=pm.getServiceInfo(new ComponentName(activity,NativeInputService.class),0);
+                require("android.permission.DUMP".equals(service.permission),"Another app can control native Input setup");
+                android.content.pm.ActivityInfo receiver=pm.getReceiverInfo(new ComponentName(activity,InputBootReceiver.class),0);
+                require(!receiver.exported,"Another app can invoke Input boot restoration");
+                android.content.pm.ActivityInfo picker=pm.getActivityInfo(new ComponentName(activity,InputsActivity.class),0);
+                require(picker.exported,"QA picker must remain available for system-route checks");
+            });
             test("Return focus: Back keeps the selected Home app",()->returnFocus("home",false,false));
             test("Return focus: Home keeps the selected Home app",()->returnFocus("home",true,false));
             test("Return focus: Home keeps the selected Apps row",()->returnFocus("apps",true,false));
